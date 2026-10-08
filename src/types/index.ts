@@ -17,6 +17,7 @@ export interface Task {
   kind: 'LIKE' | 'FOLLOW';
   url: string;
   label: string;
+  sourceButtonKey?: string;
 }
 export interface AdapterConfig {
   taskSelector: string;

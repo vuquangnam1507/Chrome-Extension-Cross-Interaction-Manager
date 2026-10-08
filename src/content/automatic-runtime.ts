@@ -13,7 +13,9 @@ export interface AutoContext {
   guard: () => Promise<void>;
 }
 export function installAutomaticHandler(
-  run: (context: AutoContext) => Promise<{ verified: boolean; detail: string }>,
+  run: (
+    context: AutoContext,
+  ) => Promise<{ verified: boolean; detail: string; skipped?: 'missing-follow-control' }>,
 ) {
   let active: AbortController | undefined;
   const handled = new Set<string>();
@@ -87,6 +89,7 @@ export function installAutomaticHandler(
     })();
   });
 }
+export class DomWaitTimeout extends Error {}
 export function waitFor<T>(
   read: () => T | null,
   signal: AbortSignal,
@@ -124,7 +127,11 @@ export function waitFor<T>(
     });
     signal.addEventListener('abort', abort, { once: true });
     timer = setTimeout(
-      () => end(undefined, Error(timeoutDetail?.() || 'Hết thời gian chờ DOM xác nhận kết quả.')),
+      () =>
+        end(
+          undefined,
+          new DomWaitTimeout(timeoutDetail?.() || 'Hết thời gian chờ DOM xác nhận kết quả.'),
+        ),
       timeout,
     );
     check();

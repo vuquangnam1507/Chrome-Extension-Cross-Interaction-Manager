@@ -1,7 +1,7 @@
 import { WorkflowManager } from './workflow-manager';
 import { transition } from './state-machine';
 import { readState, saveState } from '../services/storage.service';
-import { pending, batchComplete } from '../services/task.service';
+import { pending } from '../services/task.service';
 import { facebookUrl, sameFacebookTarget, matchesFacebookOperation } from '../utils/url';
 import { pageFromUrl } from '../config/pages';
 import type { AutoOperation, Command, State, Task } from '../types';
@@ -130,10 +130,15 @@ export class AutomaticWorkflowManager extends WorkflowManager {
       } else await this.nextTask(s);
     } else if (s.phase === 'PAGE_COMPLETED' && s.tasks.length) {
       if (this.page(s) === 'subcheofbvip') {
-        if (!batchComplete(s) || !s.tasks.every((t) => s.verifiedTasks.includes(t.id)))
+        if (!s.tasks.every((t) => s.verifiedTasks.includes(t.id) || s.skippedTasks.includes(t.id)))
           throw Error(
             'Danh sách nhóm chưa có đủ kết quả Follow được xác minh; không tự nhận thưởng.',
           );
+        if (!s.tasks.some((t) => s.verifiedTasks.includes(t.id))) {
+          this.log(s, 'Toàn bộ nhiệm vụ đã bỏ qua; không nhận thưởng nhóm.');
+          await this.finish(s);
+          return;
+        }
         if (!s.batchRewardConfirmed) await this.begin(s, 'CLAIM_BATCH', s.tasks[0], s.originTabId!);
         else await this.finish(s);
       } else await this.finish(s);
@@ -185,7 +190,7 @@ export class AutomaticWorkflowManager extends WorkflowManager {
     candidate.ready ||= ready;
     if (ready) candidate.readyUrl = facebookUrl(tab.url || '') || undefined;
     candidate.requestedSeen ||= [requestedUrl, tab.pendingUrl || '', tab.url || ''].some((url) =>
-      sameFacebookTarget(url, task.url),
+      task.sourceButtonKey && !task.url ? !!facebookUrl(url) : sameFacebookTarget(url, task.url),
     );
     return candidate;
   }
@@ -203,6 +208,18 @@ export class AutomaticWorkflowManager extends WorkflowManager {
       tab.windowId !== s.workflowWindowId
     )
       return;
+    if (task.sourceButtonKey && !task.url) {
+      const resolved = facebookUrl(tab.url || '');
+      if (!resolved) return;
+      if (
+        op.opening!.candidates.filter((c) => c.sourceKnown && c.requestedSeen && !c.blocked)
+          .length !== 1
+      )
+        throw Error('Nút nhiệm vụ mở nhiều tab Facebook; chưa xác định duy nhất tab cần Follow.');
+      if (s.tasks.some((t) => t.id !== task.id && t.url && sameFacebookTarget(t.url, resolved)))
+        throw Error('Nhiều nút nhiệm vụ mở cùng tài khoản Facebook; dừng để tránh Follow trùng.');
+      task.url = resolved;
+    }
     if (!matchesFacebookOperation(tab.url || '', task.url, candidate.documentUrl)) return;
     s.taskTabs[task.id] = tab.id;
     if (
@@ -341,7 +358,13 @@ export class AutomaticWorkflowManager extends WorkflowManager {
     return super.wake();
   }
   automaticResult(
-    message: { operationId: string; ok: boolean; verified?: boolean; detail?: string },
+    message: {
+      operationId: string;
+      ok: boolean;
+      verified?: boolean;
+      detail?: string;
+      skipped?: string;
+    },
     tab: chrome.tabs.Tab,
     url: string,
   ) {
@@ -362,6 +385,20 @@ export class AutomaticWorkflowManager extends WorkflowManager {
         this.log(s, 'Đã bấm nút gốc, đang chờ tab Facebook của công việc.');
         return;
       }
+      if (
+        message.skipped === 'missing-follow-control' &&
+        op.stage === 'FACEBOOK_ACTION' &&
+        task.page === 'subcheofbvip' &&
+        !message.verified
+      ) {
+        s.operation = null;
+        s.skippedTasks = [...new Set([...s.skippedTasks, task.id])];
+        this.log(s, 'Bỏ qua nhiệm vụ Follow VIP: không có nút Follow sau thời gian chờ.');
+        transition(s, 'TASK_COMPLETED');
+        await this.closeFollowTab(s, task, tab.id!, op.documentUrl);
+        await this.nextTask(s);
+        return;
+      }
       if (!message.verified)
         throw Error('Chưa có dấu hiệu DOM xác nhận kết quả; không đánh dấu hoàn thành.');
       s.operation = null;
@@ -371,15 +408,38 @@ export class AutomaticWorkflowManager extends WorkflowManager {
         s.verifiedTasks = [...new Set([...s.verifiedTasks, task.id])];
         s.rewardTaskId = task.id;
         transition(s, 'TASK_COMPLETED');
+        if (task.page === 'subcheofbvip')
+          await this.closeFollowTab(s, task, tab.id!, op.documentUrl);
       } else if (op.stage === 'CLAIM_REWARD') {
         s.rewardedTasks = [...new Set([...s.rewardedTasks, task.id])];
         await this.nextTask(s);
       } else {
         s.batchRewardConfirmed = true;
-        s.rewardedTasks = [...new Set([...s.rewardedTasks, ...s.tasks.map((t) => t.id)])];
+        s.rewardedTasks = [
+          ...new Set([
+            ...s.rewardedTasks,
+            ...s.tasks.filter((t) => s.verifiedTasks.includes(t.id)).map((t) => t.id),
+          ]),
+        ];
         await this.finish(s);
       }
     });
+  }
+  private async closeFollowTab(s: State, task: Task, tabId: number, documentUrl?: string) {
+    if (s.taskTabs[task.id] !== tabId) return;
+    const current = await chrome.tabs.get(tabId);
+    if (
+      this.stopped ||
+      !s.running ||
+      current.windowId !== s.workflowWindowId ||
+      !matchesFacebookOperation(current.url || '', task.url, documentUrl)
+    )
+      return;
+    await saveState(s);
+    if (this.stopped) return;
+    await chrome.tabs.remove(tabId);
+    delete s.taskTabs[task.id];
+    this.log(s, 'Đã đóng tab Follow đã xử lý do workflow mở.');
   }
   override tabRemoved(id: number) {
     return this.dispatch(async (s) => {

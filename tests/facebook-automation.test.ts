@@ -208,3 +208,44 @@ it('DOM bài viết render lại có permalink đúng thì nhận kết quả, k
     verified: true,
   });
 });
+it('Follow VIP thiếu nút sau timeout trả kết quả bỏ qua', async () => {
+  const followTask = { ...task, page: 'subcheofbvip', kind: 'FOLLOW' };
+  document.body.innerHTML = '<main><h1>Trang cá nhân</h1></main>';
+  listener(
+    {
+      type: 'AUTO_STEP',
+      operation: state.operation,
+      task: followTask,
+      config: state.settings.adapters.subcheofbvip,
+    },
+    { id: 'extension' },
+    vi.fn(),
+  );
+  await vi.advanceTimersByTimeAsync(20000);
+  expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
+    ok: true,
+    verified: false,
+    skipped: 'missing-follow-control',
+  });
+});
+it('Follow VIP đã theo dõi không click để tránh hủy theo dõi', async () => {
+  document.body.innerHTML = '<main><button>Đang theo dõi</button></main>';
+  const click = vi.fn();
+  document.querySelector('button')!.addEventListener('click', click);
+  listener(
+    {
+      type: 'AUTO_STEP',
+      operation: state.operation,
+      task: { ...task, page: 'subcheofbvip', kind: 'FOLLOW' },
+      config: state.settings.adapters.subcheofbvip,
+    },
+    { id: 'extension' },
+    vi.fn(),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(click).not.toHaveBeenCalled();
+  expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
+    ok: true,
+    verified: true,
+  });
+});

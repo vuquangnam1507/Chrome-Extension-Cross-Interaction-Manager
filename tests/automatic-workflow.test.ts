@@ -33,6 +33,9 @@ beforeEach(() => {
     },
     alarms: { clear: vi.fn(async () => true), create: vi.fn(async () => {}) },
     tabs: {
+      remove: vi.fn(async (id: number) => {
+        tabs.delete(id);
+      }),
       query: vi.fn(async ({ windowId }) =>
         [...tabs.values()].filter((t) => t.windowId === windowId),
       ),
@@ -442,4 +445,96 @@ it('sự kiện cũ đúng URL không che giấu tab hiện đã sang bài khác
   tabs.get(11)!.url = 'https://www.facebook.com/999';
   await manager.observeTab(snapshot);
   expect(state.phase).toBe('ERROR');
+});
+
+it('Follow VIP không cần URL trước click: ghép tab mới theo nguồn và đóng sau xác nhận', async () => {
+  const buttonTask: Task = {
+    ...task('subcheofbvip'),
+    id: 'subcheofbvip:button:job1',
+    sourceButtonKey: 'job1',
+    url: '',
+  };
+  await start('subcheofbvip', [buttonTask]);
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  const tab = { ...tabs.get(10)!, id: 11, openerTabId: 10, url: 'https://www.facebook.com/456' };
+  tabs.set(11, tab);
+  await manager.observeTab(tab, true);
+  expect(state.operation?.stage).toBe('FACEBOOK_ACTION');
+  expect(state.tasks[0].url).toBe(tab.url);
+  await manager.automaticResult(
+    { operationId: state.operation!.id, ok: true, verified: true },
+    tab,
+    tab.url,
+  );
+  expect(chrome.tabs.remove).toHaveBeenCalledWith(11);
+  expect(state.operation?.stage).toBe('CLAIM_BATCH');
+});
+it('nút chưa biết URL không được nhận tab Facebook thiếu nguồn mở', async () => {
+  const buttonTask: Task = {
+    ...task('subcheofbvip'),
+    id: 'subcheofbvip:button:job2',
+    sourceButtonKey: 'job2',
+    url: '',
+  };
+  await start('subcheofbvip', [buttonTask]);
+  const tab = { ...tabs.get(10)!, id: 11, url: 'https://www.facebook.com/456' };
+  tabs.set(11, tab);
+  await manager.observeTab(tab, true);
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  expect(chrome.tabs.remove).not.toHaveBeenCalled();
+});
+
+it('Follow lỗi không đóng tab và không nhận tất cả xu', async () => {
+  await start('subcheofbvip', [task('subcheofbvip')]);
+  await openFacebook();
+  const tab = tabs.get(11)!;
+  await manager.automaticResult(
+    { operationId: state.operation!.id, ok: false, detail: 'Chưa có kết quả' },
+    tab,
+    tab.url!,
+  );
+  expect(state.phase).toBe('ERROR');
+  expect(chrome.tabs.remove).not.toHaveBeenCalled();
+  expect(state.batchRewardConfirmed).toBe(false);
+});
+it('bỏ qua Follow VIP thiếu nút chuyển nhiệm vụ kế, không ghi hoàn thành giả', async () => {
+  const first = task('subcheofbvip'),
+    second = task('subcheofbvip', 456);
+  await start('subcheofbvip', [first, second]);
+  await openFacebook();
+  const tab = tabs.get(11)!;
+  await manager.automaticResult(
+    {
+      operationId: state.operation!.id,
+      ok: true,
+      verified: false,
+      skipped: 'missing-follow-control',
+    },
+    tab,
+    tab.url!,
+  );
+  expect(state.skippedTasks).toContain(first.id);
+  expect(state.completedTasks).not.toContain(first.id);
+  expect(state.verifiedTasks).not.toContain(first.id);
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  expect(state.operation?.taskId).toBe(second.id);
+  expect(chrome.tabs.remove).toHaveBeenCalledWith(11);
+});
+it('toàn bộ Follow VIP bỏ qua thì chuyển trang, không nhận thưởng', async () => {
+  await start('subcheofbvip', [task('subcheofbvip')]);
+  await openFacebook();
+  const tab = tabs.get(11)!;
+  await manager.automaticResult(
+    {
+      operationId: state.operation!.id,
+      ok: true,
+      verified: false,
+      skipped: 'missing-follow-control',
+    },
+    tab,
+    tab.url!,
+  );
+  expect(state.phase).toBe('WAITING_NEXT_PAGE');
+  expect(state.batchRewardConfirmed).toBe(false);
+  expect(state.rewardedTasks).toEqual([]);
 });

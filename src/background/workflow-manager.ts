@@ -204,12 +204,23 @@ export class WorkflowManager {
         .filter(
           (t: Task) =>
             t.page === report.page &&
-            facebookUrl(t.url) === t.url &&
-            t.id === `${t.page}:${t.url}` &&
+            ((facebookUrl(t.url) === t.url && t.id === `${t.page}:${t.url}`) ||
+              (t.page === 'subcheofbvip' &&
+                t.url === '' &&
+                typeof t.sourceButtonKey === 'string' &&
+                t.sourceButtonKey.length > 0 &&
+                t.sourceButtonKey.length <= 4000 &&
+                t.id === `subcheofbvip:button:${t.sourceButtonKey}`)) &&
             t.kind === (t.page.startsWith('like') ? 'LIKE' : 'FOLLOW'),
         )
         .slice(0, 2000);
-      s.tasks = dedupe([...s.tasks, ...valid]);
+      s.tasks = dedupe([
+        ...s.tasks,
+        ...valid.map((t) => {
+          const previous = s.tasks.find((old) => old.id === t.id);
+          return t.sourceButtonKey && previous?.url ? { ...t, url: previous.url } : t;
+        }),
+      ]);
       const p = pending(s);
       if (p.length) {
         s.emptyRetryAt = null;

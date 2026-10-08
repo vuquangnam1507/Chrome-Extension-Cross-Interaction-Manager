@@ -132,3 +132,14 @@ it('chẩn đoán riêng selector không khớp và nút thiếu URL', () => {
   document.querySelector('button')!.disabled = true;
   expect(scanDiagnostic(document, c)).toContain('chưa có nút hiển thị và tương tác');
 });
+
+it('Follow VIP nhận nút không URL, giữ ID khi đổi thứ tự và loại nút thưởng', () => {
+  document.body.innerHTML =
+    '<button class="btn btn-default" onclick="follow(123)"></button><button class="btn btn-default">Nhận tất cả xu</button><button class="btn btn-default">Tải lại danh sách</button>';
+  const first = detect(document, 'subcheofbvip', c);
+  expect(first).toHaveLength(1);
+  expect(first[0].url).toBe('');
+  document.body.append(document.querySelector('button')!);
+  expect(detect(document, 'subcheofbvip', c)[0].id).toBe(first[0].id);
+  expect(detect(document, 'subcheo', c)).toHaveLength(0);
+});

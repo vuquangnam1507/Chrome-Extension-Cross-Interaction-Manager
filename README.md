@@ -115,3 +115,13 @@ npm run build
 Tests gồm state machine, vòng trang, selector, dedupe, Start/Stop, retry, worker restore, trực tiếp click nút gốc, luồng tự động, claim nhóm, stale message, chống double click, đúng cửa sổ/opener/URL, kết quả DOM và hủy observer. Chrome API và HTML fixture chỉ được giả lập trong `tests/`, không có dữ liệu giả trong logic chạy chính. Các bài test không thực hiện tương tác hoặc nhận thưởng trên tài khoản thật.
 
 Cần kiểm tra trên trang đăng nhập thật sau khi Reload extension để xác nhận các adapter phù hợp DOM hiện tại. Nếu không phù hợp, nhật ký và bước ERROR là thông tin dùng để điều chỉnh; không coi test fixture là kết quả end-to-end trên website.
+
+### Follow VIP mở bằng nút không có URL
+
+Riêng `subcheofbvip`, nút `button.btn.btn-default` có thể vào hàng đợi dù không có URL Facebook trong thuộc tính. Nút nhận xu, tải lại, đăng nhập và cấu hình được loại trừ theo nhãn. Extension bấm từng nút gốc, chỉ nhận tab **mới trong cùng cửa sổ có bằng chứng nguồn mở** từ trang nhiệm vụ, rồi đọc URL Facebook. Không nhận tab có sẵn hoặc tab không rõ nguồn. Không đánh giá JavaScript trong thuộc tính onclick để tìm URL.
+
+Sau khi DOM Facebook xác nhận Đang theo dõi/Following, extension đóng đúng tab nhiệm vụ và tiếp tục nút kế tiếp. Không đóng tab khi kết quả chưa rõ, khi Stop, hoặc tab đã chuyển URL/cửa sổ. Khi cả danh sách được xác nhận, mới bấm Nhận tất cả xu và chờ thông báo thành công. Nút không có id/onclick dùng định danh theo vòng đời DOM; khi trang dựng lại nút không có dữ liệu nhận dạng, không thể đảm bảo nối lịch sử qua lần tải lại. Cần kiểm chứng HTML thực tế nếu cùng class còn được dùng cho chức năng khác.
+
+#### Bỏ qua Follow VIP không khả dụng
+
+Nếu vùng Facebook đã xác định nhưng không có nút Follow sau 20 giây, ghi `skippedTasks`, đóng đúng tab workflow và sang nhiệm vụ tiếp theo. Không ghi nhiệm vụ bỏ qua vào completed/verified/rewarded. Nếu nút đã là Đang theo dõi/Following, không bấm lại; ghi nhận trạng thái DOM hiện có rồi tiếp tục. Chỉ nhận thưởng nhóm khi danh sách đã xử lý hết (xác nhận hoặc bỏ qua) và có ít nhất một nhiệm vụ được xác nhận; nếu tất cả bỏ qua thì chuyển trang không nhận thưởng. Các lỗi đăng nhập, mạng, vùng tương tác mơ hồ, hoặc kết quả chưa rõ sau khi đã click vẫn dừng để kiểm tra.
