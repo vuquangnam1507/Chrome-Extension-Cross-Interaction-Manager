@@ -1,3 +1,4 @@
+import { retryTabEdit, isTabEditBusy } from './tab-retry';
 import { WorkflowManager } from './workflow-manager';
 import { transition } from './state-machine';
 import { readState, saveState } from '../services/storage.service';
@@ -437,20 +438,44 @@ export class AutomaticWorkflowManager extends WorkflowManager {
   }
   private async closeFollowTab(s: State, task: Task, tabId: number, documentUrl?: string) {
     if (s.taskTabs[task.id] !== tabId) return;
-    const current = await chrome.tabs.get(tabId);
-    if (
-      this.stopped ||
-      !s.running ||
-      current.windowId !== s.workflowWindowId ||
-      !matchesFacebookOperation(current.url || '', task.url, documentUrl)
-    )
-      return;
     await saveState(s);
-    if (this.stopped) return;
-    await chrome.tabs.remove(tabId);
-    delete s.taskTabs[task.id];
-    this.log(s, 'Đã đóng tab Follow đã xử lý do workflow mở.');
+    try {
+      const closed = await retryTabEdit(
+        async () => {
+          let current: chrome.tabs.Tab;
+          try {
+            current = await chrome.tabs.get(tabId);
+          } catch (error) {
+            if (/no tab with id/i.test(String(error))) return true;
+            throw error;
+          }
+          if (
+            this.stopped ||
+            !s.running ||
+            s.taskTabs[task.id] !== tabId ||
+            current.windowId !== s.workflowWindowId ||
+            !matchesFacebookOperation(current.url || '', task.url, documentUrl)
+          )
+            return false;
+          await chrome.tabs.remove(tabId);
+          return true;
+        },
+        () => this.stopped || !s.running,
+      );
+      if (closed) {
+        delete s.taskTabs[task.id];
+        this.log(s, 'Đã đóng tab Follow đã xử lý do workflow mở.');
+      }
+    } catch (error) {
+      if (!isTabEditBusy(error)) throw error;
+      this.log(
+        s,
+        'Chrome đang khóa chỉnh sửa tab. Đã thử đóng 4 lần; giữ tab đã xử lý và tiếp tục nhiệm vụ tiếp theo.',
+        'warning',
+      );
+    }
   }
+
   override tabRemoved(id: number) {
     return this.dispatch(async (s) => {
       if (s.operation?.tabId === id)

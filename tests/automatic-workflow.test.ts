@@ -549,3 +549,25 @@ it('toàn bộ Follow VIP đã xử lý dù bỏ qua vẫn tới bước nhận 
   expect(state.batchRewardConfirmed).toBe(false);
   expect(state.rewardedTasks).toEqual([]);
 });
+it('Chrome khóa đóng tab quá số lần retry thì cảnh báo và tiếp tục nhiệm vụ kế', async () => {
+  await start('subcheofbvip', [task('subcheofbvip'), task('subcheofbvip', 456)]);
+  await openFacebook();
+  vi.mocked(chrome.tabs.remove).mockRejectedValue(
+    Error('Tabs cannot be edited right now (user may be dragging a tab).'),
+  );
+  const tab = tabs.get(11)!;
+  const result = manager.automaticResult(
+    { operationId: state.operation!.id, ok: true, verified: true },
+    tab,
+    tab.url!,
+  );
+  await vi.advanceTimersByTimeAsync(1750);
+  await result;
+  expect(chrome.tabs.remove).toHaveBeenCalledTimes(4);
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  expect(state.operation?.taskId).toBe(task('subcheofbvip', 456).id);
+  expect(
+    state.activityLogs.some((log) => log.level === 'warning' && log.text.includes('4 lần')),
+  ).toBe(true);
+  expect(tabs.has(11)).toBe(true);
+});

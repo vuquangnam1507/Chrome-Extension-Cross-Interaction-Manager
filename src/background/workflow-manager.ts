@@ -1,3 +1,4 @@
+import { retryTabEdit } from './tab-retry';
 import { initialState, pageUrl, pageFromUrl, validateSettings } from '../config/pages';
 import type { State, Command, Scan, Task } from '../types';
 import { readState, saveState } from '../services/storage.service';
@@ -141,14 +142,27 @@ export class WorkflowManager {
         throw Error('Tab gốc đã chuyển khỏi cửa sổ workflow. Đã dừng thao tác.');
       if (!pageFromUrl(tab.url || ''))
         throw Error('Tab gốc đã đổi URL; không tự chuyển hướng. Dừng rồi Start lại.');
-      await chrome.tabs.update(s.originTabId, { url });
+      await retryTabEdit(
+        async () => {
+          const current = await chrome.tabs.get(s.originTabId!);
+          if (this.stopped || !s.running) return;
+          if (current.windowId !== tab.windowId || !pageFromUrl(current.url || ''))
+            throw Error('Tab nguồn đã đổi cửa sổ hoặc URL; không tiếp tục chuyển trang.');
+          await chrome.tabs.update(s.originTabId!, { url });
+        },
+        () => this.stopped || !s.running,
+      );
     } else {
-      const tab = await chrome.tabs.create({
-        url,
-        active: true,
-        ...(s.workflowWindowId !== null ? { windowId: s.workflowWindowId } : {}),
-      });
-      s.originTabId = tab.id ?? null;
+      const tab = await retryTabEdit(
+        () =>
+          chrome.tabs.create({
+            url,
+            active: true,
+            ...(s.workflowWindowId !== null ? { windowId: s.workflowWindowId } : {}),
+          }),
+        () => this.stopped || !s.running,
+      );
+      if (tab) s.originTabId = tab.id ?? null;
     }
     this.log(s, `Đang tải ${this.page(s)}`);
   }
