@@ -49,16 +49,26 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
   }
   if (operation.stage !== 'CLAIM_REWARD' && operation.stage !== 'CLAIM_BATCH')
     throw Error('Bước không thuộc trang nguồn.');
-  const button = await waitFor(() => {
-    if (operation.stage === 'CLAIM_BATCH') {
-      // Clicked task buttons disappear; never claim while a task button remains.
-      if (detect(document, task.page, config).length) return null;
-      const matches = rewardElements(document, true, config, null, task.page);
-      if (matches.length > 1) throw Error('Có nhiều nút Nhận tất cả xu.');
-      return matches[0] || null;
-    }
-    return individualReward(task, config, ancestors.get(task.id) || []);
-  }, signal);
+  const button = await waitFor(
+    () => {
+      if (operation.stage === 'CLAIM_BATCH') {
+        // Clicked task buttons disappear; never claim while a task button remains.
+        if (detect(document, task.page, config).length) return null;
+        const matches = rewardElements(document, true, config, null, task.page);
+        if (matches.length > 1) throw Error('Có nhiều nút Nhận tất cả xu.');
+        return matches[0] || null;
+      }
+      return individualReward(task, config, ancestors.get(task.id) || []);
+    },
+    signal,
+    20000,
+    () =>
+      operation.stage === 'CLAIM_BATCH'
+        ? detect(document, task.page, config).length
+          ? 'CLAIM_BATCH_FIND: Trang nguồn vẫn còn nút nhiệm vụ; chưa bấm Nhận tất cả xu.'
+          : 'CLAIM_BATCH_FIND: Không tìm thấy nút Nhận tất cả xu khả dụng sau 20 giây.'
+        : 'CLAIM_REWARD_FIND: Không tìm thấy nút nhận thưởng của công việc sau 20 giây.',
+  );
   const before = new Map(
     successSignals(document, config).map(({ element, text }) => [element, text]),
   );
@@ -67,12 +77,19 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
   if (operation.stage === 'CLAIM_BATCH' && detect(document, task.page, config).length)
     throw Error('Danh sách vẫn còn nút nhiệm vụ; chưa nhận tất cả xu.');
   button.click();
-  const evidence = await waitFor(() => {
-    const current = successSignals(document, config);
-    const visibleElements = new Set(current.map((s) => s.element));
-    for (const element of before.keys()) if (!visibleElements.has(element)) before.delete(element);
-    return current.find(({ element, text }) => before.get(element) !== text)?.text || null;
-  }, signal);
+  const evidence = await waitFor(
+    () => {
+      const current = successSignals(document, config);
+      const visibleElements = new Set(current.map((s) => s.element));
+      for (const element of before.keys())
+        if (!visibleElements.has(element)) before.delete(element);
+      return current.find(({ element, text }) => before.get(element) !== text)?.text || null;
+    },
+    signal,
+    20000,
+    () =>
+      `${operation.stage}_CONFIRM: Đã bấm nhận thưởng nhưng chưa thấy thông báo thành công mới sau 20 giây. Danh sách tải lại không tự được coi là nhận thưởng thành công; cần kiểm tra thông báo thực tế hoặc rewardSuccessSelector.`,
+  );
   ancestors.delete(task.id);
   return { verified: true, detail: `Trang nguồn báo: ${evidence.slice(0, 180)}` };
 });

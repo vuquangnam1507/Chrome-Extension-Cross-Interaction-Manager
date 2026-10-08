@@ -208,7 +208,7 @@ it('DOM bài viết render lại có permalink đúng thì nhận kết quả, k
     verified: true,
   });
 });
-it('Follow VIP tải xong thiếu nút trả kết quả bỏ qua ngay', async () => {
+it('Follow VIP thiếu nút chỉ bỏ qua sau một lần kiểm tra 5 giây', async () => {
   const followTask = { ...task, page: 'subcheofbvip', kind: 'FOLLOW' };
   document.body.innerHTML = '<main><h1>Trang cá nhân</h1></main>';
   listener(
@@ -221,7 +221,7 @@ it('Follow VIP tải xong thiếu nút trả kết quả bỏ qua ngay', async (
     { id: 'extension' },
     vi.fn(),
   );
-  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(5000);
   expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
     ok: true,
     verified: false,
@@ -242,7 +242,7 @@ it('Follow VIP đã theo dõi không click để tránh hủy theo dõi', async 
     { id: 'extension' },
     vi.fn(),
   );
-  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(5000);
   expect(click).not.toHaveBeenCalled();
   expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
     ok: true,
@@ -250,10 +250,8 @@ it('Follow VIP đã theo dõi không click để tránh hủy theo dõi', async 
   });
 });
 
-it('Follow VIP chờ load thực sự rồi bỏ qua ngay, không cần timer tìm nút', async () => {
-  let ready: DocumentReadyState = 'loading';
-  vi.spyOn(document, 'readyState', 'get').mockImplementation(() => ready);
-  document.body.innerHTML = '<main>Trang cá nhân</main>';
+it('document complete nhưng dữ liệu tải muộn thì không đóng tab sớm', async () => {
+  document.body.innerHTML = '<main><h1>Trang cá nhân</h1></main>';
   listener(
     {
       type: 'AUTO_STEP',
@@ -264,13 +262,71 @@ it('Follow VIP chờ load thực sự rồi bỏ qua ngay, không cần timer t�
     { id: 'extension' },
     vi.fn(),
   );
-  await vi.advanceTimersByTimeAsync(0);
+  await vi.advanceTimersByTimeAsync(4000);
   expect(messages.some((m) => m.type === 'AUTO_RESULT')).toBe(false);
-  ready = 'complete';
-  document.dispatchEvent(new Event('readystatechange'));
-  await vi.advanceTimersByTimeAsync(0);
+  document.querySelector('main')!.insertAdjacentHTML('beforeend', '<button>Theo dõi</button>');
+  const button = document.querySelector('button')!;
+  button.addEventListener('click', () => {
+    button.textContent = 'Đang theo dõi';
+  });
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
+    ok: true,
+    verified: true,
+  });
+});
+it('sau 5 giây chưa có nút kể cả còn loading thì bỏ qua thay vì dừng', async () => {
+  document.body.innerHTML = '<main aria-busy="true"><h1>Trang cá nhân</h1></main>';
+  listener(
+    {
+      type: 'AUTO_STEP',
+      operation: state.operation,
+      task: { ...task, page: 'subcheofbvip', kind: 'FOLLOW' },
+      config: state.settings.adapters.subcheofbvip,
+    },
+    { id: 'extension' },
+    vi.fn(),
+  );
+  await vi.advanceTimersByTimeAsync(5000);
   expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
     ok: true,
     skipped: 'missing-follow-control',
   });
+});
+it('không có main hoặc tiêu đề hồ sơ vẫn bỏ qua ở giây thứ 5', async () => {
+  document.body.innerHTML = '<div>Đang tải</div>';
+  listener(
+    {
+      type: 'AUTO_STEP',
+      operation: state.operation,
+      task: { ...task, page: 'subcheofbvip', kind: 'FOLLOW' },
+      config: state.settings.adapters.subcheofbvip,
+    },
+    { id: 'extension' },
+    vi.fn(),
+  );
+  await vi.advanceTimersByTimeAsync(4999);
+  expect(messages.some((m) => m.type === 'AUTO_RESULT')).toBe(false);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
+    ok: true,
+    skipped: 'missing-follow-control',
+  });
+});
+it('Stop trong thời gian chờ 5 giây không trả kết quả bỏ qua cho background đóng tab', async () => {
+  document.body.innerHTML = '<main></main>';
+  listener(
+    {
+      type: 'AUTO_STEP',
+      operation: state.operation,
+      task: { ...task, page: 'subcheofbvip', kind: 'FOLLOW' },
+      config: state.settings.adapters.subcheofbvip,
+    },
+    { id: 'extension' },
+    vi.fn(),
+  );
+  await vi.advanceTimersByTimeAsync(1000);
+  state.running = false;
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({ ok: false });
 });

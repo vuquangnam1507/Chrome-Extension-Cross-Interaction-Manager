@@ -94,7 +94,7 @@ export class AutomaticWorkflowManager extends WorkflowManager {
       stage,
       taskId: task.id,
       tabId,
-      deadline: Date.now() + 30000,
+      deadline: Date.now() + (stage === 'OPEN_TASK' ? 30000 : 50000),
     };
     s.loadDeadline = null;
     this.log(
@@ -388,7 +388,10 @@ export class AutomaticWorkflowManager extends WorkflowManager {
       ) {
         s.operation = null;
         s.skippedTasks = [...new Set([...s.skippedTasks, task.id])];
-        this.log(s, 'Bỏ qua nhiệm vụ Follow VIP: tab đã tải xong nhưng không có nút Follow.');
+        this.log(
+          s,
+          'Bỏ qua nhiệm vụ Follow VIP: không xác định được nút Follow sau một lần kiểm tra trong 5 giây.',
+        );
         transition(s, 'TASK_COMPLETED');
         await this.closeFollowTab(s, task, tab.id!, op.documentUrl);
         await this.nextTask(s);

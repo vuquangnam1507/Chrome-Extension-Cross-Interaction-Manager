@@ -38,26 +38,52 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
   const timeoutDetail = () =>
     resolutionError ||
     'Đã gửi thao tác nhưng chưa thấy dấu hiệu xác nhận trên nút Facebook (nhãn Đã thích/Bỏ thích hoặc aria-pressed). Không bấm lại để tránh đảo ngược tương tác.';
+  const quickFollow = task.page === 'subcheofbvip' && task.kind === 'FOLLOW';
   let control;
-  if (task.page === 'subcheofbvip' && task.kind === 'FOLLOW') {
-    // Only the initial discovery is immediate; never skip an uncertain result
-    // after a click. Wait for document load, not an arbitrary grace period.
-    await waitFor(() => (document.readyState === 'complete' ? true : null), signal);
+  if (quickFollow) {
+    // One discovery pass after a bounded data-loading grace period.
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => {
+        clearTimeout(timer);
+        signal.removeEventListener('abort', abort);
+        reject(Error('Đã hủy thao tác.'));
+      };
+      const timer = setTimeout(() => {
+        signal.removeEventListener('abort', abort);
+        resolve();
+      }, 5000);
+      signal.addEventListener('abort', abort, { once: true });
+      if (signal.aborted) abort();
+    });
     await guard();
     control = inspect();
-    if (!control && resolutionError === 'Chưa tìm thấy nút tương tác của bài viết đích.') {
+    if (!control) {
       return {
         verified: false,
         skipped: 'missing-follow-control' as const,
-        detail: 'Bỏ qua: tab đã tải xong nhưng không có nút Follow; chưa thực hiện tương tác.',
+        detail: `Bỏ qua sau một lần kiểm tra (5 giây): ${resolutionError}`,
       };
     }
+  } else {
+    control = await waitFor(
+      inspect,
+      signal,
+      20000,
+      () => `FACEBOOK_FIND_CONTROL: ${resolutionError}`,
+    );
   }
-  control ||= await waitFor(inspect, signal, 20000, timeoutDetail);
   if (!control.done) {
     await guard();
-    const current = inspect();
-    if (!current) throw Error(resolutionError || 'Nút tương tác đã thay đổi.');
+    const current = quickFollow ? (control.button.isConnected ? control : null) : inspect();
+    if (!current) {
+      if (quickFollow)
+        return {
+          verified: false,
+          skipped: 'missing-follow-control' as const,
+          detail: 'Bỏ qua: nút Follow đã biến mất trước khi bấm.',
+        };
+      throw Error(resolutionError || 'Nút tương tác đã thay đổi.');
+    }
     pinnedScope = current.scope;
     if (!current.done) current.button.click();
   } else pinnedScope = control.scope;
@@ -68,7 +94,8 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
     },
     signal,
     20000,
-    timeoutDetail,
+    () =>
+      `FACEBOOK_CONFIRM: ${task.kind === 'FOLLOW' ? 'Đã bấm Follow nhưng chưa thấy Đang theo dõi/Following. ' : ''}${timeoutDetail()}`,
   );
   return {
     verified: true,

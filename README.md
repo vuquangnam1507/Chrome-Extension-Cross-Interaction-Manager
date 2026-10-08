@@ -124,8 +124,14 @@ Sau khi DOM Facebook xác nhận Đang theo dõi/Following, extension đóng đ�
 
 #### Bỏ qua Follow VIP không khả dụng
 
-Nếu vùng Facebook đã xác định nhưng không có nút Follow ngay khi tài liệu tải xong (document.readyState=complete), ghi `skippedTasks`, đóng đúng tab workflow và sang nhiệm vụ tiếp theo. Không ghi nhiệm vụ bỏ qua vào completed/verified/rewarded. Nếu nút đã là Đang theo dõi/Following, không bấm lại; ghi nhận trạng thái DOM hiện có rồi tiếp tục. Sau khi mọi nhiệm vụ trong lượt đã xử lý (xác nhận hoặc bỏ qua), chờ trang nguồn không còn nút nhiệm vụ hiển thị mới bấm Nhận tất cả xu. Trang nguồn quyết định kết quả nhận thưởng; không đánh dấu nhiệm vụ bỏ qua là Follow thành công. Các lỗi đăng nhập, mạng, vùng tương tác mơ hồ, hoặc kết quả chưa rõ sau khi đã click vẫn dừng để kiểm tra.
+Nếu vùng Facebook đã xác định nhưng không xác định được nút Follow ở lần kiểm tra duy nhất sau 5 giây, ghi `skippedTasks`, đóng đúng tab workflow và sang nhiệm vụ tiếp theo. Không ghi nhiệm vụ bỏ qua vào completed/verified/rewarded. Nếu nút đã là Đang theo dõi/Following, không bấm lại; ghi nhận trạng thái DOM hiện có rồi tiếp tục. Sau khi mọi nhiệm vụ trong lượt đã xử lý (xác nhận hoặc bỏ qua), chờ trang nguồn không còn nút nhiệm vụ hiển thị mới bấm Nhận tất cả xu. Trang nguồn quyết định kết quả nhận thưởng; không đánh dấu nhiệm vụ bỏ qua là Follow thành công. Các lỗi đăng nhập, mạng, vùng tương tác mơ hồ, hoặc kết quả chưa rõ sau khi đã click vẫn dừng để kiểm tra.
 
 #### Lặp lại danh sách Follow VIP sau nhận thưởng
 
 Các nút nhiệm vụ biến mất sau click không làm mất hàng đợi đã lưu. Sau khi hết lượt và không còn nút nhiệm vụ khả dụng, bấm Nhận tất cả xu đúng một lần, chờ thông báo nhận thành công, xóa hàng đợi lượt cũ và quét danh sách do trang tự tải lại. Không điều hướng hoặc bấm tải lại lần nữa sau nhận thưởng. Tiến độ completed/skipped/verified của lượt cũ được gỡ trước lượt mới để nhiệm vụ được cấp lại không bị bỏ qua; nhật ký và lịch sử thưởng vẫn giữ. Stop hủy thao tác chờ như trước. Chưa có nhiệm vụ mới với thông báo hết việc rõ ràng vẫn áp dụng lịch chờ và điều phối các trang đã chọn.
+
+#### Kiểm tra nhanh Follow VIP
+
+Khi bước Facebook bắt đầu, chờ 5 giây rồi kiểm tra nút đúng một lần. Không tìm thấy hoặc chưa xác định được nút/vùng hồ sơ thì ghi bỏ qua, đóng đúng tab workflow và tiếp tục, kể cả khi trang vẫn đang tải. Không yêu cầu heading hay document.readyState để bỏ qua. Nút đã Đang theo dõi không bị bấm lại. Sau khi đã click Follow, vẫn chờ bằng chứng kết quả; không đánh đồng click với thành công. Stop, đăng nhập/checkpoint, mất mạng hoặc tab đổi URL/cửa sổ vẫn được kiểm tra trước thao tác.
+
+Lỗi chờ có tên bước: FACEBOOK_FIND_CONTROL (các trang khác), FACEBOOK_CONFIRM, CLAIM_BATCH_FIND/CLAIM_REWARD_FIND và CLAIM_BATCH_CONFIRM/CLAIM_REWARD_CONFIRM. Deadline mở tab là 30 giây; các bước tương tác/nhận thưởng là 50 giây. Việc trang tự tải lại danh sách không thay thế bằng chứng nhận thưởng thành công.

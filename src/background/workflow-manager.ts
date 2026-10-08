@@ -22,7 +22,7 @@ export class WorkflowManager {
         s.operation = null;
         s.dueAt = null;
         s.loadDeadline = null;
-        this.log(s, s.error);
+        this.log(s, s.error, 'error');
       }
       await saveState(s);
       await this.schedule(s);
@@ -31,8 +31,14 @@ export class WorkflowManager {
     this.queue = run.catch(() => {});
     return run;
   }
-  log(s: State, text: string) {
-    s.activityLogs = [{ time: Date.now(), text }, ...s.activityLogs].slice(0, 250);
+  log(
+    s: State,
+    text: string,
+    level: 'info' | 'warning' | 'error' = /bỏ qua|chưa có.*nhiệm vụ|chưa có.*công việc/i.test(text)
+      ? 'warning'
+      : 'info',
+  ) {
+    s.activityLogs = [{ time: Date.now(), text, level }, ...s.activityLogs].slice(0, 250);
   }
   page(s: State) {
     return s.settings.order[s.currentPageIndex];

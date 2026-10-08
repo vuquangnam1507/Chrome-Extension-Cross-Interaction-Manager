@@ -69,7 +69,7 @@ export interface State {
   skippedTasks: string[];
   tasks: Task[];
   settings: Settings;
-  activityLogs: { time: number; text: string }[];
+  activityLogs: { time: number; text: string; level?: 'info' | 'warning' | 'error' }[];
   lastTransitionTime: number;
   originTabId: number | null;
   taskTabs: Record<string, number>;

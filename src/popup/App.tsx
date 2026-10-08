@@ -1,18 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useWorkflow } from './store';
-import type { Settings, Command, Phase } from '../types';
+import type { Settings, Command } from '../types';
 
 export default function App() {
   const { state: s, busy, error, execute } = useWorkflow();
   const [tab, setTab] = useState('work');
   const [draft, setDraft] = useState<Settings | null>(null);
-  const [now, setNow] = useState(Date.now());
   const [adapter, setAdapter] = useState('');
   const [localError, setLocalError] = useState('');
   useEffect(() => {
     void execute({ type: 'GET' });
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
   }, [execute]);
   useEffect(() => {
     if (s && !s.running) {
@@ -21,29 +18,38 @@ export default function App() {
     }
   }, [s?.settings, s?.running]);
   if (!s) return <main>Đang kết nối CrossEngage…{error && <p>{error}</p>}</main>;
-  const page = s.settings.order[s.currentPageIndex];
-  const task = s.tasks.find((t) => t.id === s.currentTaskId);
-  const batch = page === 'subcheofbvip';
   const action = (type: Command['type']) => void execute({ type } as Command);
-  const phaseLabels: Record<Phase, string> = {
-    STOPPED: 'Đã dừng',
-    IDLE: 'Chuẩn bị',
-    LOADING_PAGE: 'Đang tải trang',
-    SCANNING_TASKS: 'Đang tìm nhiệm vụ',
-    TASK_AVAILABLE: 'Đã phát hiện nhiệm vụ',
-    WAITING_USER_ACTION: 'Đang mở công việc tự động',
-    WAITING_CONFIRMATION: 'Đang thực hiện trên Facebook',
-    TASK_COMPLETED: 'Đang xử lý nhận thưởng',
-    PAGE_COMPLETED: 'Hoàn tất danh sách',
-    WAITING_NEXT_PAGE: 'Đang chờ chuyển trang',
-    ERROR: 'Đã tạm dừng do lỗi',
-  };
-  const operationLabels = {
-    OPEN_TASK: 'Bấm nút gốc → chờ Facebook mở',
-    FACEBOOK_ACTION: 'Thực hiện tương tác → kiểm tra kết quả',
-    CLAIM_REWARD: 'Nhận xu → kiểm tra thông báo',
-    CLAIM_BATCH: 'Nhận tất cả xu → kiểm tra thông báo',
-  };
+  const logLevel = (entry: (typeof s.activityLogs)[number]) =>
+    entry.level ||
+    (entry.text === s.error
+      ? 'error'
+      : /bỏ qua|chưa có.*nhiệm vụ|chưa có.*công việc/i.test(entry.text)
+        ? 'warning'
+        : 'info');
+  const renderSteps = () => (
+    <ol
+      className="logs steps"
+      role="log"
+      aria-label="Các bước thực hiện"
+      aria-live="polite"
+      aria-relevant="additions"
+    >
+      {s.activityLogs.map((entry, index) => {
+        const level = logLevel(entry);
+        return (
+          <li key={`${entry.time}-${index}`} className={`log-${level}`}>
+            <div className="log-meta">
+              <time>{new Date(entry.time).toLocaleTimeString('vi-VN')}</time>
+              <span>
+                {level === 'error' ? '✕ Lỗi' : level === 'warning' ? '⚠ Cảnh báo' : '• Thực hiện'}
+              </span>
+            </div>
+            <div>{entry.text}</div>
+          </li>
+        );
+      })}
+    </ol>
+  );
   const enabled = !s.running && draft ? draft.enabled : s.settings.enabled;
   const selectedPages = s.settings.order.filter((p) => enabled[p]);
   const titles = {
@@ -52,8 +58,6 @@ export default function App() {
     subcheo: 'Follow thường',
     subcheofbvip: 'Follow VIP · thưởng nhóm',
   };
-  const countdown = s.emptyRetryAt ?? s.dueAt;
-  const completed = s.tasks.filter((t) => s.verifiedTasks.includes(t.id)).length;
   return (
     <main>
       <header>
@@ -166,7 +170,7 @@ export default function App() {
       </div>
       <nav>
         {[
-          ['work', 'Công việc'],
+          ['work', 'Các bước'],
           ['settings', 'Cấu hình'],
           ['logs', 'Nhật ký'],
         ].map(([id, label]) => (
@@ -181,43 +185,15 @@ export default function App() {
         </div>
       )}
       {tab === 'work' && (
-        <>
-          <section>
-            <div className="eyebrow">TRANG ĐANG XỬ LÝ</div>
-            <h2>{page}</h2>
-            <small>{phaseLabels[s.phase]}</small>
-            <div className="stats">
-              <div>
-                <strong>{s.tasks.length}</strong>Phát hiện
-              </div>
-              <div>
-                <strong>
-                  {completed} / {s.tasks.length}
-                </strong>
-                Đã có kết quả
-              </div>
-              <div>
-                <strong>
-                  {countdown ? Math.max(0, Math.ceil((countdown - now) / 1000)) : '—'}
-                </strong>
-                {s.emptyRetryAt ? `Tải lại lần ${s.emptyRetryCount + 1}` : 'Giây chờ'}
-              </div>
-            </div>
-            <progress max={s.tasks.length || 1} value={completed} />
-          </section>
-          <section>
-            <div className="eyebrow">
-              TỰ ĐỘNG · {batch ? 'THƯỞNG THEO NHÓM' : 'THƯỞNG TỪNG CÔNG VIỆC'}
-            </div>
-            <h2>{s.operation ? operationLabels[s.operation.stage] : phaseLabels[s.phase]}</h2>
-            {task && <p className="url">{task.url}</p>}
-            <p className="note">Start để chạy toàn bộ quy trình. Stop để hủy các bước đang chờ.</p>
-            <small>
-              Đã nhận thưởng: {s.tasks.filter((t) => s.rewardedTasks.includes(t.id)).length} /{' '}
-              {s.tasks.length} · Chỉ thao tác trên tab thuộc workflow trong cửa sổ Chrome này.
-            </small>
-          </section>
-        </>
+        <section className="execution-steps">
+          <h2>Các bước thực hiện</h2>
+          <p className="note">Mới nhất ở trên.</p>
+          {s.activityLogs.length ? (
+            renderSteps()
+          ) : (
+            <p className="note">Chưa có bước thực hiện. Chọn chức năng và bấm Start.</p>
+          )}
+        </section>
       )}
       {tab === 'settings' && draft && (
         <section>
@@ -323,14 +299,7 @@ export default function App() {
           >
             Xóa lịch sử xử lý
           </button>
-          <ol className="logs">
-            {s.activityLogs.map((l, i) => (
-              <li key={`${l.time}-${i}`}>
-                <time>{new Date(l.time).toLocaleTimeString('vi-VN')}</time>
-                {l.text}
-              </li>
-            ))}
-          </ol>
+          {renderSteps()}
         </section>
       )}
       <footer>TỰ ĐỘNG · CHỈ TAB THUỘC WORKFLOW</footer>
