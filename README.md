@@ -26,7 +26,7 @@ npm run build
 1. Tạo hoặc dùng lại tab nguồn thuộc workflow trong **cửa sổ Chrome nơi bấm Start**.
 2. Quét danh sách công việc thật, loại trùng theo trang + URL Facebook chuẩn hóa.
 3. **Bấm chính nút công việc trên Tuongtaccheo**. Hàm `onclick` của website xử lý việc mở tab; extension không chỉ lấy URL rồi tự tạo tab Facebook thay thế.
-4. Nhận tab Facebook khi URL đúng công việc, `openerTabId` đúng tab nguồn, cùng `windowId`, và trang tải xong.
+4. Nhận tab Facebook mới trong cùng `windowId`, có bằng chứng mở từ tab nguồn qua `openerTabId` hoặc `webNavigation.onCreatedNavigationTarget`. Loại toàn bộ tab đã tồn tại trước click. Content script gửi `FB_READY` thì được tiếp tục, kể cả tài nguyên phụ vẫn đang tải. Các URL dạng số, story/permalink/profile và URL có tracking được so theo ID đối tượng. Redirect sang URL khác chỉ được chấp nhận khi Chrome báo redirect từ tab công việc đã xác minh; URL tài liệu được ghim vào operation và kiểm tra trước mỗi click.
 5. Đọc nút Like/Follow trên DOM, chỉ bấm khi tìm được một nút phù hợp trong vùng nội dung của mục tiêu. Nếu đã có trạng thái đã thích/đang theo dõi thì không bấm lại để tránh hủy tương tác.
 6. Chờ DOM hiển thị trạng thái đã thích/đang theo dõi. Chỉ ghi nhận tiến độ sau khi thấy dấu hiệu đó, không coi việc gửi click là thành công.
 7. Với ba trang thưởng lẻ, bấm nút nhận thưởng trong container của đúng công việc và chờ thông báo thành công mới xuất hiện.
@@ -37,7 +37,7 @@ Bốn module: `likepostvipcheo`, `likepostvipre`, `subcheo`, `subcheofbvip`, dư
 
 ### Khi hết nhiệm vụ
 
-Nhận diện thông báo hiển thị “Chưa có thêm nhiệm vụ”, hoặc selector hết việc đã cấu hình. Chờ **3 giây**, hoặc **5 giây nếu chỉ chọn một trang**, rồi bấm nút có nhãn “Tải lại danh sách”/“Tải lại”. Đợi tối đa 4 giây cho danh sách cập nhật trước khi xác nhận còn rỗng. Tối đa 3 lượt thử mỗi trang. Nếu vẫn rỗng thì sang trang tiếp theo đã chọn; nếu cả vòng rỗng thì Stop. Chỉ chọn một trang thì Stop sau 3 lần vẫn rỗng. Có công việc mới sẽ hủy lượt chờ tải lại.
+Nhận diện thông báo hiển thị “Chưa có thêm nhiệm vụ”, hoặc selector hết việc đã cấu hình. Chờ **3 giây**, hoặc **5 giây nếu chỉ chọn một trang**, rồi bấm nút có nhãn “Tải lại danh sách”/“Tải lại”. Đợi tối đa 4 giây cho danh sách cập nhật trước khi xác nhận còn rỗng. Khi chọn nhiều trang: tối đa 3 lượt thử mỗi lần ghé trang rồi chuyển trang, tiếp tục vòng mới kể cả khi cả vòng chưa có nhiệm vụ. Khi chỉ chọn một trang: tiếp tục chờ 5 giây và tải lại cho đến khi có nhiệm vụ hoặc bấm Stop. Chỉ thông báo hết nhiệm vụ rõ ràng mới được tiếp tục chờ; lỗi đăng nhập, DOM không xác định hoặc lỗi thao tác vẫn dừng để kiểm tra. Có công việc mới sẽ hủy lượt chờ tải lại.
 
 ### Phạm vi thao tác
 
@@ -53,12 +53,12 @@ Nhận diện thông báo hiển thị “Chưa có thêm nhiệm vụ”, hoặ
 Đã có HTML nút Like thật chứa URL bọc dấu nháy trong `title` (`tests/fixtures/like-title.html`). Chưa kiểm thử trực tiếp toàn bộ DOM đăng nhập hiện tại của Facebook và nút nhận thưởng trên cả bốn trang. Các quy tắc dưới đây là adapter DOM có kiểm thử fixture; build thành công không chứng minh website thực tế luôn phù hợp.
 
 - Công việc: `.btn.btn-default`, hiển thị, không disabled, không phải nút chức năng. Đọc `href`, `data-url`, `title` và thuộc tính URL đã cấu hình. URL mỗi nút được đọc riêng, không hardcode URL mẫu. Chỉ bấm phần tử tìm được từ đúng taskId. Không dùng `eval` hoặc gọi API Facebook trực tiếp.
-- Facebook: tìm vùng bài viết có permalink đúng URL, hoặc một vùng bài viết duy nhất; fallback vùng `main` duy nhất. Nút có nhãn Việt/Anh chính xác: Thích/Like, Theo dõi/Follow. Hỗ trợ thêm marker thực tế `[data-ad-rendering-role="like_button"]` dù không có nhãn/role: chọn control cha hoặc con trong đúng vùng bài viết, hoặc chính marker khi có thể bấm; không tính marker và nút bao quanh thành hai nút riêng. Kết quả dựa trên `aria-pressed=true`, Bỏ thích/Unlike hoặc Đang theo dõi/Following. Có nhiều nút hoặc không xác định được mục tiêu thì báo lỗi, không chọn nút đầu tiên tùy ý.
+- Facebook: ưu tiên hộp thoại bài viết đang hiển thị, tìm permalink theo cả URL task gốc và URL tài liệu đã được xác minh sau redirect. Phân biệt article bài chính với article bình luận lồng nhau; không dùng liên kết `comment_id` để chọn bình luận làm bài đích. Nếu không có permalink, chỉ trong tài liệu đã xác minh mới dùng marker Like duy nhất ở vùng chính hoặc article chính, loại feed/sidebar khỏi các ứng viên fallback. Nút có nhãn Việt/Anh chính xác: Thích/Like, Theo dõi/Follow. Marker `[data-ad-rendering-role="like_button"]` được ưu tiên hơn nhãn Like chung trong bình luận; chọn control cha/con hoặc chính marker khi có thể bấm. Nếu Facebook dựng lại vùng bài viết sau click, chỉ nối lại vùng mới khi có permalink đúng bài đích; không bấm lại. Sau click giữ vùng đã chọn để chờ `aria-pressed=true`, Bỏ thích/Unlike, Đã thích/Liked, Gỡ thích/Remove Like trong nhãn, title hoặc nội dung nút (kể cả phần tử con), hoặc Đang theo dõi/Following. Khi DOM chưa phân biệt được bài đích, MutationObserver chờ cập nhật tối đa 20 giây thay vì báo lỗi ngay; hết thời gian vẫn mơ hồ thì dừng, không chọn bài đầu tiên tùy ý.
 - Thưởng lẻ: dùng container/selector đã cấu hình; nếu chưa cấu hình, tìm từ cây tổ tiên của nút công việc vừa bấm, loại container chứa công việc khác, yêu cầu duy nhất nút nhãn Nhận xu/Nhận thưởng. Không lấy nút Nhận tất cả xu cho thưởng lẻ.
 - Thưởng nhóm: duy nhất nút hiển thị có nội dung Nhận tất cả xu.
 - Kết quả thưởng: thông báo hiển thị mới trong vùng alert/toast có nội dung nhận thành công/đã cộng xu, hoặc `rewardSuccessSelector` đã xác minh. Thông báo cũ không đủ để xác nhận lượt mới. Nếu website báo kết quả theo DOM khác, workflow báo timeout để sửa adapter.
 
-Dấu hiệu DOM phản ánh giao diện, không phải chứng nhận độc lập từ máy chủ Facebook. Extension không vượt CAPTCHA, không xử lý checkpoint tự động và không truy cập API Facebook không được cấp quyền. Nếu site chặn popup do click không có user gesture hoặc mở bằng `noopener` làm mất quan hệ tab nguồn, workflow sẽ timeout thay vì tự nhận nhầm tab. Nội dung trang nguồn phải được tải lại sau khi reload extension.
+Dấu hiệu DOM phản ánh giao diện, không phải chứng nhận độc lập từ máy chủ Facebook. Extension không vượt CAPTCHA, không xử lý checkpoint tự động và không truy cập API Facebook không được cấp quyền. Nếu site chặn popup hoặc Chrome không cung cấp đủ bằng chứng nguồn mở tab, workflow dừng và ghi rõ nguyên nhân ghép tab trong nhật ký, thay vì tự nhận tab khác đang có cùng URL. `noopener` được hỗ trợ qua sự kiện nguồn mở của webNavigation khi Chrome cung cấp sự kiện này. Nội dung trang nguồn phải được tải lại sau khi reload extension.
 
 ### Adapter nâng cao
 
@@ -102,7 +102,7 @@ Các tên trạng thái nội bộ `WAITING_USER_ACTION` và `WAITING_CONFIRMATI
 
 Deadline dùng `setTimeout` và một alarm dự phòng tối thiểu 30 giây. Không có `setInterval` để giữ service worker sống. Nếu worker ngủ hoặc máy ngủ, bước chờ có thể lâu hơn số giây cấu hình. Xem [Chrome alarms](https://developer.chrome.com/docs/extensions/reference/api/alarms). Khi popup đóng, workflow tiếp tục; khi Stop, khôi phục worker vẫn giữ stopped.
 
-Quyền: `storage`, `alarms` và host Tuongtaccheo/Facebook. Content scripts khai báo tĩnh, không cần quyền scripting. Dữ liệu tiến độ lưu cục bộ; không đọc cookie/mật khẩu, không gửi dữ liệu tới server riêng, không chứa tài khoản hoặc token bí mật.
+Quyền: `storage`, `alarms`, `webNavigation` và host Tuongtaccheo/Facebook. Quyền `webNavigation` dùng để xác định chính xác nguồn mở tab mới và redirect, tránh dựa vào URL hoặc thứ tự tab để đoán. Sự kiện ngoài nguồn/cửa sổ workflow không được dùng để thao tác. Xem [tài liệu webNavigation của Chrome](https://developer.chrome.com/docs/extensions/reference/api/webNavigation). Sau cập nhật cần Reload extension để áp dụng quyền mới; nếu Chrome yêu cầu xác nhận quyền, kiểm tra quyền này trước khi bật lại. Content scripts khai báo tĩnh, không cần quyền scripting. Dữ liệu tiến độ lưu cục bộ; không đọc cookie/mật khẩu, không gửi dữ liệu tới server riêng, không chứa tài khoản hoặc token bí mật.
 
 ## Kiểm thử
 

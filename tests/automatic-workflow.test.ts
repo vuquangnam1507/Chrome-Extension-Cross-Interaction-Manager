@@ -152,7 +152,9 @@ it('bỏ qua mọi tab khác cửa sổ, khác opener hoặc khác URL', async (
       windowId: 7,
       ...overrides,
     });
-    expect(state.operation).toEqual(original);
+    expect(state.operation?.id).toBe(original!.id);
+    expect(state.operation?.stage).toBe('OPEN_TASK');
+    expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(2);
   }
   expect(state.taskTabs).toEqual({});
 });
@@ -283,7 +285,7 @@ it('tab thiếu opener: dùng nguồn mở từ webNavigation và không chờ t
     ...tabs.get(10)!,
     id: 11,
     url: 'about:blank',
-    status: 'loading' as chrome.tabs.TabStatus,
+    status: 'loading' as chrome.tabs.Tab['status'],
   };
   tabs.set(11, tab);
   await manager.observeTab(tab);
@@ -301,7 +303,7 @@ it('FB_READY đến trước nguồn điều hướng vẫn ghép tab khi bằng
     ...tabs.get(10)!,
     id: 11,
     url: task().url,
-    status: 'loading' as chrome.tabs.TabStatus,
+    status: 'loading' as chrome.tabs.Tab['status'],
   };
   tabs.set(11, tab);
   await manager.observeTab(tab, true);
@@ -349,7 +351,7 @@ it('chuyển hướng đã xác minh từ URL số sang permalink mới được
     ...tabs.get(10)!,
     id: 11,
     url: 'https://www.facebook.com/person/posts/pfbidABC',
-    status: 'loading' as chrome.tabs.TabStatus,
+    status: 'loading' as chrome.tabs.Tab['status'],
   };
   tabs.set(11, tab);
   await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 0, tabId: 11, url: task().url });
@@ -389,7 +391,7 @@ it('worker restore tìm lại tab đã có nguồn xác minh mà không bấm m�
     ...tabs.get(10)!,
     id: 11,
     url: 'about:blank',
-    status: 'loading' as chrome.tabs.TabStatus,
+    status: 'loading' as chrome.tabs.Tab['status'],
   };
   tabs.set(11, tab);
   await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 0, tabId: 11, url: task().url });

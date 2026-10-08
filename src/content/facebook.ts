@@ -1,8 +1,10 @@
 import { installAutomaticHandler, waitFor } from './automatic-runtime';
-import { facebookScope, socialControl } from './automatic-dom';
+import { facebookScope, socialControl, FacebookScopeError } from './automatic-dom';
 import { visible } from './detection';
 installAutomaticHandler(async ({ request: { operation, task, config }, signal, guard }) => {
   if (operation.stage !== 'FACEBOOK_ACTION') throw Error('Bước không thuộc Facebook.');
+  let pinnedScope: ParentNode | null = null;
+  let resolutionError = '';
   function inspect() {
     if (!navigator.onLine) throw Error('Mất kết nối mạng.');
     if (
@@ -10,28 +12,49 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
       [...document.querySelectorAll<HTMLElement>('input[type="password"]')].some(visible)
     )
       throw Error('Facebook yêu cầu đăng nhập hoặc kiểm tra tài khoản.');
-    if (
-      !document.querySelector(
-        config.facebookScopeSelector || 'main,[role="main"],article,[role="article"]',
-      )
-    )
-      return null;
-    return socialControl(
-      facebookScope(document, { ...task, url: operation.documentUrl || task.url }, config),
-      task.kind,
-    );
+    try {
+      if (pinnedScope instanceof HTMLElement && !pinnedScope.isConnected) {
+        // React may replace the entire post after a successful interaction.
+        // Rebind only with a matching permalink, never with a positional fallback.
+        pinnedScope = facebookScope(
+          document,
+          task,
+          config,
+          operation.documentUrl || task.url,
+          true,
+        );
+      }
+      const scope =
+        pinnedScope || facebookScope(document, task, config, operation.documentUrl || task.url);
+      const control = socialControl(scope, task.kind);
+      resolutionError = control ? '' : 'Chưa tìm thấy nút tương tác của bài viết đích.';
+      return control ? { ...control, scope } : null;
+    } catch (error) {
+      if (!(error instanceof FacebookScopeError)) throw error;
+      resolutionError = error.message;
+      return null; // Facebook may still be hydrating the post, dialog or permalink.
+    }
   }
-  const control = await waitFor(inspect, signal);
+  const timeoutDetail = () =>
+    resolutionError ||
+    'Đã gửi thao tác nhưng chưa thấy dấu hiệu xác nhận trên nút Facebook (nhãn Đã thích/Bỏ thích hoặc aria-pressed). Không bấm lại để tránh đảo ngược tương tác.';
+  const control = await waitFor(inspect, signal, 20000, timeoutDetail);
   if (!control.done) {
     await guard();
     const current = inspect();
-    if (!current) throw Error('Nút tương tác đã thay đổi.');
+    if (!current) throw Error(resolutionError || 'Nút tương tác đã thay đổi.');
+    pinnedScope = current.scope;
     if (!current.done) current.button.click();
-  }
-  await waitFor(() => {
-    const next = inspect();
-    return next?.done ? true : null;
-  }, signal);
+  } else pinnedScope = control.scope;
+  await waitFor(
+    () => {
+      const next = inspect();
+      return next?.done ? true : null;
+    },
+    signal,
+    20000,
+    timeoutDetail,
+  );
   return {
     verified: true,
     detail: `Facebook đã hiển thị trạng thái ${task.kind === 'LIKE' ? 'đã thích' : 'đang theo dõi'}.`,

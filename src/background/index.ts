@@ -20,7 +20,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     else if (message?.type === 'READY' && pageFromUrl(sender.url || ''))
       result = manager.pageReady(id);
     else if (message?.type === 'FB_READY')
-      result = chrome.tabs.get(id).then((tab) => manager.observeTab(tab, true));
+      result = chrome.tabs.get(id).then((tab) => manager.observeTab(tab, true, sender.url || ''));
     else if (
       message?.type === 'AUTO_RESULT' &&
       typeof message.operationId === 'string' &&

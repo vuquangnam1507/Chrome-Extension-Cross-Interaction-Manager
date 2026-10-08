@@ -41,6 +41,8 @@ export interface AutoOperation {
       sourceKnown: boolean;
       requestedSeen: boolean;
       ready: boolean;
+      readyUrl?: string;
+      blocked?: boolean;
       documentUrl?: string;
     }[];
   };

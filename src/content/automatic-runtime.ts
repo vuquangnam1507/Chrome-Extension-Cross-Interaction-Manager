@@ -87,7 +87,12 @@ export function installAutomaticHandler(
     })();
   });
 }
-export function waitFor<T>(read: () => T | null, signal: AbortSignal, timeout = 20000): Promise<T> {
+export function waitFor<T>(
+  read: () => T | null,
+  signal: AbortSignal,
+  timeout = 20000,
+  timeoutDetail?: () => string,
+): Promise<T> {
   return new Promise((resolve, reject) => {
     let finished = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -119,7 +124,7 @@ export function waitFor<T>(read: () => T | null, signal: AbortSignal, timeout = 
     });
     signal.addEventListener('abort', abort, { once: true });
     timer = setTimeout(
-      () => end(undefined, Error('Hết thời gian chờ DOM xác nhận kết quả.')),
+      () => end(undefined, Error(timeoutDetail?.() || 'Hết thời gian chờ DOM xác nhận kết quả.')),
       timeout,
     );
     check();

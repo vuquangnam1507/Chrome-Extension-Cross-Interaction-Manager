@@ -82,7 +82,7 @@ export class WorkflowManager {
           attempt: s.emptyRetryCount,
         });
         if (!result?.ok) throw Error(result?.error || 'Không thể tải lại danh sách.');
-        this.log(s, `Đã yêu cầu tải lại danh sách (${s.emptyRetryCount}/3).`);
+        this.log(s, `Đã yêu cầu tải lại danh sách (lần ${s.emptyRetryCount}).`);
       } else if (s.dueAt !== null && Date.now() >= s.dueAt) {
         s.currentPageIndex = nextIndex(s);
         await this.navigate(s);
@@ -221,23 +221,22 @@ export class WorkflowManager {
           transition(s, 'TASK_AVAILABLE');
         }
       } else if (s.tasks.length === 0 && report.status === 'empty') {
-        if (s.emptyRetryCount < 3) {
+        const singlePage = s.settings.order.filter((p) => s.settings.enabled[p]).length === 1;
+        if (singlePage || s.emptyRetryCount < 3) {
           if (s.emptyRetryAt === null) {
             const seconds =
               s.settings.order.filter((p) => s.settings.enabled[p]).length === 1 ? 5 : 3;
             s.emptyRetryAt = Date.now() + seconds * 1000;
             this.log(
               s,
-              `Chưa có thêm nhiệm vụ. Chờ ${seconds} giây để tải lại (${s.emptyRetryCount + 1}/3).`,
+              `Chưa có thêm nhiệm vụ. Chờ ${seconds} giây để tải lại (${s.emptyRetryCount + 1}${singlePage ? '' : '/3'}).`,
             );
           }
           return;
         }
         s.emptyVisits++;
-        if (s.emptyVisits >= s.settings.order.filter((p) => s.settings.enabled[p]).length) {
-          await this.stop(s);
-          this.log(s, 'Đã kiểm tra hết các trang đang bật, không có công việc mới.');
-        } else await this.finish(s);
+        this.log(s, 'Chưa có nhiệm vụ sau 3 lần tải lại; tiếp tục trang kế tiếp.');
+        await this.finish(s);
       } else if (s.phase === 'SCANNING_TASKS') transition(s, 'PAGE_COMPLETED');
       this.log(s, `Phát hiện ${s.tasks.length} công việc; còn ${p.length}.`);
     });

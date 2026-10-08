@@ -113,3 +113,64 @@ it('không lấy control ở ngoài phạm vi bài viết hoặc dùng Like mark
   expect(socialControl(article, 'LIKE')).toBeNull();
   expect(socialControl(article, 'FOLLOW')).toBeNull();
 });
+it('bài chính và các article bình luận lồng nhau chỉ có một vùng bài đích', () => {
+  document.body.innerHTML =
+    '<main><article id="post"><div data-ad-rendering-role="like_button"></div><article><button>Thích</button></article><article><button>Thích</button></article></article></main>';
+  const scope = facebookScope(document, task, config, task.url);
+  expect(scope).toBe(document.querySelector('#post'));
+  expect(socialControl(scope, 'LIKE')?.button).toBe(
+    document.querySelector('[data-ad-rendering-role]'),
+  );
+});
+it('bài mở trong dialog được ưu tiên hơn feed phía sau', () => {
+  document.body.innerHTML =
+    '<main><article><div data-ad-rendering-role="like_button"></div></article><article><div data-ad-rendering-role="like_button"></div></article></main><div role="dialog"><div id="target" data-ad-rendering-role="like_button"></div><article><button>Thích</button></article></div>';
+  const scope = facebookScope(document, task, config, task.url);
+  expect(scope).toBe(document.querySelector('[role="dialog"]'));
+  expect(socialControl(scope, 'LIKE')?.button.id).toBe('target');
+});
+it('marker bài chính nằm ngoài danh sách article bình luận vẫn được chọn', () => {
+  document.body.innerHTML =
+    '<main><div id="target" data-ad-rendering-role="like_button"></div><article><button>Thích</button></article><article><button>Thích</button></article></main>';
+  const scope = facebookScope(document, task, config, task.url);
+  expect(scope).toBe(document.querySelector('main'));
+  expect(socialControl(scope, 'LIKE')?.button.id).toBe('target');
+});
+it('giữ URL task gốc để so permalink kể cả URL tài liệu sau redirect khác dạng', () => {
+  document.body.innerHTML =
+    '<main><article id="target"><a href="https://www.facebook.com/123">Thời gian</a><div data-ad-rendering-role="like_button"></div></article><article><div data-ad-rendering-role="like_button"></div></article></main>';
+  expect(
+    facebookScope(document, task, config, 'https://www.facebook.com/user/posts/pfbidABC'),
+  ).toBe(document.querySelector('#target'));
+});
+it('Like marker được ưu tiên hơn nhãn Like thông thường trong bình luận', () => {
+  document.body.innerHTML =
+    '<article><div id="target" data-ad-rendering-role="like_button"></div><div><button>Thích</button><button>Thích</button></div></article>';
+  expect(socialControl(document.querySelector('article')!, 'LIKE')?.button.id).toBe('target');
+});
+it('bài đề xuất trong feed/sidebar không lấn át bài chính ngoài feed', () => {
+  document.body.innerHTML =
+    '<main><article id="target"><div data-ad-rendering-role="like_button"></div></article><div role="feed"><article><div data-ad-rendering-role="like_button"></div></article></div><aside><article><div data-ad-rendering-role="like_button"></div></article></aside></main>';
+  expect(facebookScope(document, task, config, task.url)).toBe(document.querySelector('#target'));
+});
+it('permalink bình luận không được dùng để chọn nhầm comment làm bài đích', () => {
+  document.body.innerHTML =
+    '<main><article id="target"><div data-ad-rendering-role="like_button"></div><article><a href="https://www.facebook.com/123?comment_id=99">Comment</a><button>Thích</button></article></article></main>';
+  expect(facebookScope(document, task, config, task.url)).toBe(document.querySelector('#target'));
+});
+it('hai bài thật đều có marker mà không có permalink vẫn không chọn bừa', () => {
+  document.body.innerHTML =
+    '<main><article><div data-ad-rendering-role="like_button"></div></article><article><div data-ad-rendering-role="like_button"></div></article></main>';
+  expect(() => facebookScope(document, task, config, task.url)).toThrow('nhiều bài viết');
+});
+
+it('không coi màu xanh, số lượt thích hoặc nhãn ẩn là xác nhận Like', () => {
+  document.body.innerHTML =
+    '<button aria-label="Thích" style="color:blue"><div data-ad-rendering-role="like_button"></div><span hidden>Đã thích</span></button><span>10 người đã thích</span>';
+  expect(socialControl(document, 'LIKE')?.done).toBe(false);
+});
+it('đọc title xác nhận độc lập với aria-label cũ', () => {
+  document.body.innerHTML =
+    '<button aria-label="Thích" title="Bỏ thích"><div data-ad-rendering-role="like_button"></div></button>';
+  expect(socialControl(document, 'LIKE')?.done).toBe(true);
+});

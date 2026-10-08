@@ -170,6 +170,7 @@ export class AutomaticWorkflowManager extends WorkflowManager {
     const task = s.tasks.find((t) => t.id === op.taskId);
     if (!task) return null;
     let candidate = op.opening.candidates.find((c) => c.tabId === tab.id);
+    if (candidate?.blocked) return null;
     sourceKnown = sourceKnown || tab.openerTabId === s.originTabId;
     if (!candidate) {
       if (!sourceKnown && !ready) return null;
@@ -182,6 +183,7 @@ export class AutomaticWorkflowManager extends WorkflowManager {
       this.log(s, `Đã nhận nguồn mở tab ${tab.id} từ trang công việc.`);
     }
     candidate.ready ||= ready;
+    if (ready) candidate.readyUrl = facebookUrl(tab.url || '') || undefined;
     candidate.requestedSeen ||= [requestedUrl, tab.pendingUrl || '', tab.url || ''].some((url) =>
       sameFacebookTarget(url, task.url),
     );
@@ -203,13 +205,17 @@ export class AutomaticWorkflowManager extends WorkflowManager {
       return;
     if (!matchesFacebookOperation(tab.url || '', task.url, candidate.documentUrl)) return;
     s.taskTabs[task.id] = tab.id;
-    if (!candidate.ready && tab.status !== 'complete') return;
+    if (
+      !(candidate.ready && candidate.readyUrl === facebookUrl(tab.url || '')) &&
+      tab.status !== 'complete'
+    )
+      return;
     this.log(s, `Đã ghép tab Facebook ${tab.id}; chuyển sang thực hiện ${task.kind}.`);
     s.operation = null;
     transition(s, 'WAITING_CONFIRMATION');
     await this.begin(s, 'FACEBOOK_ACTION', task, tab.id, facebookUrl(tab.url || '')!);
   }
-  observeTab(tab: chrome.tabs.Tab, ready = false) {
+  observeTab(tab: chrome.tabs.Tab, ready = false, reportedUrl = tab.url || '') {
     return this.dispatch(async (s) => {
       const op = s.operation;
       if (s.running && op && tab.id === op.tabId) {
@@ -223,7 +229,15 @@ export class AutomaticWorkflowManager extends WorkflowManager {
         )
           throw Error('Tab đang thực thi đã đổi URL hoặc cửa sổ; đã hủy thao tác.');
       }
-      this.candidate(s, tab, false, '', ready);
+      this.candidate(
+        s,
+        tab,
+        false,
+        '',
+        ready &&
+          !!facebookUrl(reportedUrl) &&
+          facebookUrl(reportedUrl) === facebookUrl(tab.url || ''),
+      );
       await this.attachReadyTab(s, tab);
     });
   }
@@ -278,6 +292,7 @@ export class AutomaticWorkflowManager extends WorkflowManager {
         ['server_redirect', 'client_redirect'].includes(q),
       );
       if (manual) {
+        candidate.blocked = true;
         candidate.sourceKnown = false;
         candidate.requestedSeen = false;
         candidate.documentUrl = undefined;

@@ -200,7 +200,7 @@ export default function App() {
                 <strong>
                   {countdown ? Math.max(0, Math.ceil((countdown - now) / 1000)) : '—'}
                 </strong>
-                {s.emptyRetryAt ? `Tải lại ${s.emptyRetryCount + 1}/3` : 'Giây chờ'}
+                {s.emptyRetryAt ? `Tải lại lần ${s.emptyRetryCount + 1}` : 'Giây chờ'}
               </div>
             </div>
             <progress max={s.tasks.length || 1} value={completed} />

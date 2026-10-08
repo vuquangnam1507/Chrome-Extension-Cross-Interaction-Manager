@@ -214,7 +214,7 @@ it('selector không rõ không tự chuyển trang', async () => {
   expect(stored.phase).toBe('ERROR');
   expect(stored.dueAt).toBeNull();
 });
-it('tất cả trang rỗng thì dừng sau một vòng', async () => {
+it('tất cả trang rỗng vẫn tiếp tục vòng mới', async () => {
   await manager.command({ type: 'START' });
   for (let n = 0; n < 4; n++) {
     await manager.pageReady(stored.originTabId!);
@@ -232,9 +232,10 @@ it('tất cả trang rỗng thì dừng sau một vòng', async () => {
         pageUrl(page),
       );
     }
-    if (n < 3) await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(5000);
   }
-  expect(stored.running).toBe(false);
+  expect(stored.running).toBe(true);
+  expect(stored.currentPageIndex).toBe(0);
   expect(stored.emptyVisits).toBe(4);
 });
 it('Stop ngay khi Start đang nằm trong hàng đợi không mở tab', async () => {
@@ -357,13 +358,14 @@ it('một trang chờ 5 giây rồi tải lại danh sách tại chỗ', async (
     expect.objectContaining({ type: 'RELOAD_LIST', attempt: 1 }),
   );
   expect(chrome.tabs.update).not.toHaveBeenCalled();
-  for (let n = 0; n < 2; n++) {
+  for (let n = 0; n < 6; n++) {
     await reportEmpty();
     await vi.advanceTimersByTimeAsync(5000);
   }
   await reportEmpty();
-  expect(stored.running).toBe(false);
-  expect(stored.emptyRetryCount).toBe(3);
+  expect(stored.running).toBe(true);
+  expect(stored.emptyRetryCount).toBe(7);
+  expect(stored.emptyRetryAt).toBe(Date.now() + 5000);
 });
 it('Stop hủy lần tải lại danh sách đang chờ', async () => {
   await manager.command({ type: 'START' });
