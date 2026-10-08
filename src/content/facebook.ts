@@ -1,7 +1,8 @@
 import { installAutomaticHandler, waitFor } from './automatic-runtime';
 import { facebookScope, socialControl } from './automatic-dom';
 import { visible } from './detection';
-installAutomaticHandler(async ({ request: { task, config }, signal, guard }) => {
+installAutomaticHandler(async ({ request: { operation, task, config }, signal, guard }) => {
+  if (operation.stage !== 'FACEBOOK_ACTION') throw Error('Bước không thuộc Facebook.');
   function inspect() {
     if (!navigator.onLine) throw Error('Mất kết nối mạng.');
     if (
@@ -9,6 +10,12 @@ installAutomaticHandler(async ({ request: { task, config }, signal, guard }) => 
       [...document.querySelectorAll<HTMLElement>('input[type="password"]')].some(visible)
     )
       throw Error('Facebook yêu cầu đăng nhập hoặc kiểm tra tài khoản.');
+    if (
+      !document.querySelector(
+        config.facebookScopeSelector || 'main,[role="main"],article,[role="article"]',
+      )
+    )
+      return null;
     return socialControl(facebookScope(document, task, config), task.kind);
   }
   const control = await waitFor(inspect, signal);

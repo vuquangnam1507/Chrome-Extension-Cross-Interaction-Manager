@@ -1,5 +1,5 @@
 import { installAutomaticHandler, waitFor } from './automatic-runtime';
-import { controls, successMessages } from './automatic-dom';
+import { controls, successSignals } from './automatic-dom';
 import { interactive, rewardElements } from './detection';
 import { modules } from '../modules';
 import type { AdapterConfig, Task } from '../types';
@@ -57,14 +57,18 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
     }
     return individualReward(task, config, ancestors.get(task.id) || []);
   }, signal);
-  const before = new Set(successMessages(document, config));
+  const before = new Map(
+    successSignals(document, config).map(({ element, text }) => [element, text]),
+  );
   await guard();
   if (!interactive(button)) throw Error('Nút nhận thưởng đã thay đổi.');
   button.click();
-  const evidence = await waitFor(
-    () => successMessages(document, config).find((text) => !before.has(text)) || null,
-    signal,
-  );
+  const evidence = await waitFor(() => {
+    const current = successSignals(document, config);
+    const visibleElements = new Set(current.map((s) => s.element));
+    for (const element of before.keys()) if (!visibleElements.has(element)) before.delete(element);
+    return current.find(({ element, text }) => before.get(element) !== text)?.text || null;
+  }, signal);
   ancestors.delete(task.id);
   return { verified: true, detail: `Trang nguồn báo: ${evidence.slice(0, 180)}` };
 });

@@ -55,8 +55,12 @@ export function installAutomaticHandler(
           : pageFromUrl(location.href) !== m.task.page
       )
         throw Error('URL hiện tại không thuộc công việc.');
-      const permission = await chrome.runtime.sendMessage({type:'AUTO_GUARD',operationId:m.operation.id});
-      if (controller.signal.aborted || !permission?.ok) throw Error('Tab không còn nằm trong phạm vi workflow.');
+      const permission = await chrome.runtime.sendMessage({
+        type: 'AUTO_GUARD',
+        operationId: m.operation.id,
+      });
+      if (controller.signal.aborted || !permission?.ok)
+        throw Error('Tab không còn nằm trong phạm vi workflow.');
     };
     reply({ ok: true });
     void (async () => {

@@ -1,12 +1,10 @@
 # CrossEngage
 
-Chrome Extension Manifest V3 hỗ trợ người dùng quản lý công việc Like/Follow trên bốn trang Tuongtaccheo. React + TypeScript + Vite, Zustand cho giao diện và Chrome Storage cho trạng thái bền vững.
+Chrome Extension Manifest V3, React + TypeScript + Vite + Zustand. **Chọn các chức năng và Start để chạy tự động; Stop để hủy điều phối.** Popup không yêu cầu mở từng công việc, bấm “Tôi đã Like/Follow” hay xác nhận thưởng bằng tay.
 
-**Extension không tự Like, Follow, nhận xu, gửi API Facebook, vượt CAPTCHA hoặc xác minh kết quả tương tác.** Công việc được hoàn thành trong extension chỉ có nghĩa người dùng đã xác nhận.
+## Cài đặt / cập nhật
 
-## Cài đặt nhanh
-
-Yêu cầu Node.js **24 LTS**, npm, Chrome 120 trở lên.
+Yêu cầu Node 24 và Chrome 120+.
 
 ```bash
 nvm use
@@ -15,135 +13,105 @@ npm test
 npm run build
 ```
 
-1. Mở `chrome://extensions/`.
-2. Bật **Developer mode / Chế độ dành cho nhà phát triển**.
-3. Chọn **Load unpacked / Tải tiện ích đã giải nén**.
-4. Chọn thư mục **dist** của dự án (không chọn `src` hoặc thư mục gốc).
-5. Ghim CrossEngage lên thanh công cụ và mở popup.
-6. Đăng nhập Tuongtaccheo và Facebook bằng thao tác của bạn. Bấm **Start**.
-7. Sau khi cập nhật build: bấm **Reload** trong `chrome://extensions/`, tải lại tab trang nguồn để cập nhật content script.
+1. Mở `chrome://extensions/`, bật Developer mode.
+2. Load unpacked → chọn thư mục **dist**.
+3. Khi đã cài: bấm **Reload** extension rồi tải lại tab Tuongtaccheo và các tab Facebook thuộc workflow để cập nhật content scripts.
+4. Đăng nhập các website trong cùng Chrome. Mở popup, chọn 1–4 chức năng, bấm **Start**.
+5. Dòng **Cập nhật: HH:mm · DD/MM/YYYY** hiển thị thời gian build của bản đang cài, theo giờ Việt Nam. Không cần chạy server khi dùng extension.
 
-`npm run dev` chỉ phục vụ phát triển popup. Để thử workflow thực phải build và Load unpacked, vì trang Vite thông thường không có Chrome Extension API.
+`npm run dev` chỉ phục vụ phát triển popup, không phải cách chạy extension. Build đặt `version_name` là thời gian hiển thị và `version` dạng số theo [định dạng manifest Chrome](https://developer.chrome.com/docs/extensions/reference/manifest/version).
 
-Mỗi lần build, phiên bản hiển thị trong Chrome được đặt theo giờ Việt Nam, dạng `22:17 · 08/10/2026`. Popup có dòng **Cập nhật: HH:mm · DD/MM/YYYY** ngay dưới tên CrossEngage. Đây là thời gian build của bản đang cài, không phải đồng hồ chạy. Manifest trong `dist` dùng `version_name` cho giờ hiển thị và `version` dạng số theo ngày/giờ/giây để Chrome nhận diện bản build, theo [quy định phiên bản Chrome](https://developer.chrome.com/docs/extensions/reference/manifest/version). Reload extension để thấy bản mới.
+## Luồng tự động
 
-## Sử dụng
+1. Tạo hoặc dùng lại tab nguồn thuộc workflow trong **cửa sổ Chrome nơi bấm Start**.
+2. Quét danh sách công việc thật, loại trùng theo trang + URL Facebook chuẩn hóa.
+3. **Bấm chính nút công việc trên Tuongtaccheo**. Hàm `onclick` của website xử lý việc mở tab; extension không chỉ lấy URL rồi tự tạo tab Facebook thay thế.
+4. Nhận tab Facebook khi URL đúng công việc, `openerTabId` đúng tab nguồn, cùng `windowId`, và trang tải xong.
+5. Đọc nút Like/Follow trên DOM, chỉ bấm khi tìm được một nút phù hợp trong vùng nội dung của mục tiêu. Nếu đã có trạng thái đã thích/đang theo dõi thì không bấm lại để tránh hủy tương tác.
+6. Chờ DOM hiển thị trạng thái đã thích/đang theo dõi. Chỉ ghi nhận tiến độ sau khi thấy dấu hiệu đó, không coi việc gửi click là thành công.
+7. Với ba trang thưởng lẻ, bấm nút nhận thưởng trong container của đúng công việc và chờ thông báo thành công mới xuất hiện.
+8. Với `subcheofbvip`, hoàn tất toàn bộ Follow trước, sau đó bấm **Nhận tất cả xu** một lần và chờ thông báo thành công. Không nhận thưởng từng việc trên trang này.
+9. Tự sang công việc/trang tiếp theo theo thứ tự và lựa chọn đã lưu. Khoảng chuyển trang tối thiểu 5 giây.
 
-- Trong **Chọn chức năng chạy** ngay đầu popup, tích 1, 2, 3 hoặc cả 4 mục. Có nút **Chọn tất cả / Bỏ chọn tất cả** và hiển thị thứ tự chạy. Bấm **Start (N/4)** để lưu lựa chọn và chạy từ mục đầu tiên được chọn theo thứ tự đã lưu; các mục không chọn sẽ bị bỏ qua. Bấm **Stop** trước khi đổi lựa chọn.
-- **Start** tạo tab Tuongtaccheo do extension theo dõi; lần tiếp theo có thể tái sử dụng tab gốc còn hợp lệ.
-- Chọn **Mở Facebook** cho công việc hiện tại. Extension giữ mapping taskId/tabId và ưu tiên quay lại tab đã mở có đúng URL.
-- Tự Like/Follow; mở lại popup rồi bấm **Tôi đã Like/Follow**. Tab Facebook được giữ nguyên.
-- Với ba trang thưởng lẻ, bấm **Tìm thưởng công việc vừa xong** để quay lại và làm nổi bật nút thưởng trong container của công việc vừa xác nhận. Bạn tự nhấn nhận thưởng. Có thể tiếp tục công việc kế tiếp trong popup.
-- Với `subcheofbvip`, xác nhận từng Follow. Chỉ khi **mọi** công việc trong danh sách được xác nhận, nút tìm **Nhận tất cả xu** và xác nhận thưởng nhóm mới khả dụng. Tự nhận xu ở trang nguồn, sau đó bấm **Tôi đã nhận thưởng nhóm**; extension mới chờ chuyển trang. Công việc bị bỏ qua không được coi là hoàn thành nhóm.
-- **Bỏ qua trang** là quyết định chủ động rời trang, không ghi nhận nhận thưởng thành công.
-- **Stop** hủy timer/alarm, vô hiệu hóa scan cũ và dừng observer. Không đóng bất kỳ tab nào. API mở/điều hướng đã được gửi trước lúc Stop không thể thu hồi; không phát hành thêm thao tác sau khi cờ Stop được ghi nhận.
-- Cấu hình thứ tự, bật/tắt từng trang và khoảng chờ trong tab **Cấu hình** khi đã Stop.
-- **Xóa lịch sử xử lý** khi đã Stop xóa cả tiến độ, mapping và nhật ký; giữ cấu hình và các tab hiện có.
+Bốn module: `likepostvipcheo`, `likepostvipre`, `subcheo`, `subcheofbvip`, dưới `https://tuongtaccheo.com/kiemtien/`.
 
-## Những phần cần xác minh bằng HTML thật
+### Khi hết nhiệm vụ
 
-Đã có HTML một nút Like thực tế chứa URL trong `title`, lưu tại `tests/fixtures/like-title.html` và được kiểm thử. Chưa có HTML đầy đủ của danh sách và nút nhận thưởng trên cả bốn trang. Fixture `tests/fixtures/tasks.html` là dữ liệu tổng hợp, **không phải bằng chứng toàn bộ selector phù hợp website thật**. Logic chạy chính đọc DOM thật và storage, không có công việc giả lập.
+Nhận diện thông báo hiển thị “Chưa có thêm nhiệm vụ”, hoặc selector hết việc đã cấu hình. Chờ **3 giây**, hoặc **5 giây nếu chỉ chọn một trang**, rồi bấm nút có nhãn “Tải lại danh sách”/“Tải lại”. Đợi tối đa 4 giây cho danh sách cập nhật trước khi xác nhận còn rỗng. Tối đa 3 lượt thử mỗi trang. Nếu vẫn rỗng thì sang trang tiếp theo đã chọn; nếu cả vòng rỗng thì Stop. Chỉ chọn một trang thì Stop sau 3 lần vẫn rỗng. Có công việc mới sẽ hủy lượt chờ tải lại.
 
-Adapter mặc định tìm `.btn.btn-default`, kiểm tra hiển thị/disabled, loại nhãn chức năng như nhận xu/tải lại/đăng nhập, và yêu cầu trích được URL HTTPS Facebook hợp lệ. URL lấy từ `href`, `data-url`, `title` (hỗ trợ URL bọc dấu nháy đơn/đôi theo HTML nút Like đã cung cấp), thuộc tính được cấu hình, hoặc thẻ `a` trong container đã cấu hình. Không chạy hay phân tích tùy tiện mã `onclick`, không đoán ID Facebook.
+### Phạm vi thao tác
 
-Trong **Cấu hình → Adapter DOM nâng cao**, mỗi trang có các trường:
+- Extension chạy trong phiên/profile Chrome đã cài, không điều khiển ứng dụng khác hoặc profile Chrome khác.
+- Mỗi workflow gắn với một cửa sổ Chrome. Tab Facebook có cùng URL nhưng không được mở từ tab nguồn hoặc khác cửa sổ sẽ không được nhận làm tab công việc.
+- Trước mỗi click, content script kiểm tra operation token và Stop trong storage, rồi hỏi background xác minh lại tab, URL và cửa sổ thực tế.
+- Đổi URL, chuyển tab workflow sang cửa sổ khác, đóng tab đang thực thi hoặc hết deadline sẽ tạm dừng với lỗi.
+- Không đóng tab nào. Không focus cửa sổ khác, không quét để tái sử dụng tab Facebook người dùng đang làm việc riêng.
+- Stop phát tín hiệu hủy đến content scripts, hủy observer chờ kết quả và deadline; không phát lại click. Lệnh đã gửi cho website trước thời điểm Stop không thể thu hồi.
 
-| Trường                     | Ý nghĩa                                                                                                                      |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `taskSelector`             | Selector ứng viên; mặc định `.btn.btn-default`. Thu hẹp vào khu vực danh sách thật nếu có nút Facebook không phải công việc. |
-| `containerSelector`        | Selector container của một công việc, cần xác minh; mặc định trống.                                                          |
-| `urlAttribute`             | Thuộc tính chứa URL Facebook đầy đủ nếu khác `href`/`data-url`; mặc định trống.                                              |
-| `individualRewardSelector` | Selector thưởng lẻ **bên trong container công việc**; mặc định trống, không bịa selector.                                    |
-| `emptySelector`            | Selector thông báo “hết công việc” đã được xác minh; mặc định trống. Không dùng container trống chung chung.                 |
+## Nhận diện DOM và giới hạn xác minh
 
-Bốn trang có adapter độc lập. Sau khi kiểm tra HTML bằng DevTools, nhập selector chính xác và lưu. Nếu trang chỉ chứa hàm JavaScript/ID nội bộ không kèm URL, cần bổ sung parser có kiểm thử vào module tương ứng dựa trên HTML thực tế; hiện extension sẽ không coi nút đó là công việc.
+Đã có HTML nút Like thật chứa URL bọc dấu nháy trong `title` (`tests/fixtures/like-title.html`). Chưa kiểm thử trực tiếp toàn bộ DOM đăng nhập hiện tại của Facebook và nút nhận thưởng trên cả bốn trang. Các quy tắc dưới đây là adapter DOM có kiểm thử fixture; build thành công không chứng minh website thực tế luôn phù hợp.
 
-Thưởng nhóm tìm nút/thẻ liên kết có nội dung hiển thị chính xác **Nhận tất cả xu**, có chuẩn hóa khoảng trắng và hoa/thường. Nếu không tìm được hoặc có nhiều nút phù hợp, extension báo lỗi thay vì chọn bừa. Làm nổi bật thưởng chỉ scroll và outline; không click công việc hoặc nút nhận thưởng. Chỉ nút tải lại danh sách được tự nhấn theo yêu cầu người dùng.
+- Công việc: `.btn.btn-default`, hiển thị, không disabled, không phải nút chức năng. Đọc `href`, `data-url`, `title` và thuộc tính URL đã cấu hình. URL mỗi nút được đọc riêng, không hardcode URL mẫu. Chỉ bấm phần tử tìm được từ đúng taskId. Không dùng `eval` hoặc gọi API Facebook trực tiếp.
+- Facebook: tìm vùng bài viết có permalink đúng URL, hoặc một vùng bài viết duy nhất; fallback vùng `main` duy nhất. Nút có nhãn Việt/Anh chính xác: Thích/Like, Theo dõi/Follow. Kết quả dựa trên `aria-pressed=true`, Bỏ thích/Unlike hoặc Đang theo dõi/Following. Có nhiều nút hoặc không xác định được mục tiêu thì báo lỗi, không chọn nút đầu tiên tùy ý.
+- Thưởng lẻ: dùng container/selector đã cấu hình; nếu chưa cấu hình, tìm từ cây tổ tiên của nút công việc vừa bấm, loại container chứa công việc khác, yêu cầu duy nhất nút nhãn Nhận xu/Nhận thưởng. Không lấy nút Nhận tất cả xu cho thưởng lẻ.
+- Thưởng nhóm: duy nhất nút hiển thị có nội dung Nhận tất cả xu.
+- Kết quả thưởng: thông báo hiển thị mới trong vùng alert/toast có nội dung nhận thành công/đã cộng xu, hoặc `rewardSuccessSelector` đã xác minh. Thông báo cũ không đủ để xác nhận lượt mới. Nếu website báo kết quả theo DOM khác, workflow báo timeout để sửa adapter.
 
-Không nhận diện được selector **khác** hết việc: extension đợi DOM ổn định ban đầu tối đa 4 giây rồi báo lỗi nếu chưa nhận diện được. Với trang tải lâu hơn, đợi trang xong rồi bấm **Quét lại**. Nhận diện hết việc khi trang hiển thị “Chưa có thêm nhiệm vụ” hoặc `emptySelector` đã cấu hình khớp.
+Dấu hiệu DOM phản ánh giao diện, không phải chứng nhận độc lập từ máy chủ Facebook. Extension không vượt CAPTCHA, không xử lý checkpoint tự động và không truy cập API Facebook không được cấp quyền. Nếu site chặn popup do click không có user gesture hoặc mở bằng `noopener` làm mất quan hệ tab nguồn, workflow sẽ timeout thay vì tự nhận nhầm tab. Nội dung trang nguồn phải được tải lại sau khi reload extension.
 
-Khi chưa có công việc trong lượt hiện tại, chờ 3 giây (5 giây nếu chỉ chọn một trang), bấm nút có nhãn chính xác “Tải lại danh sách” hoặc “Tải lại”, rồi chờ 4 giây để kiểm tra kết quả tải. Thử tối đa 3 lần mỗi trang; có nhiệm vụ mới thì hủy lượt chờ. Hết 3 lần sẽ chuyển sang trang tiếp theo đã chọn; kiểm tra hết một vòng đều rỗng thì Stop. Nếu chỉ chọn một trang, Stop sau 3 lần vẫn rỗng. Deadline và bộ đếm được lưu vào storage để khôi phục khi worker tạm dừng; Stop hủy cả chờ tải lại và chờ chuyển trang. Nếu không có nút tải lại phù hợp hoặc có nhiều nút trùng nhãn, báo lỗi để xác minh HTML, không đoán selector. Danh sách đã phát hiện còn chờ người dùng xử lý hoặc xác nhận thưởng nhóm không tự bị bỏ qua.
+### Adapter nâng cao
+
+Dừng workflow trước khi sửa JSON trong **Cấu hình**. Các trường độc lập cho từng trang:
+
+| Trường                     | Mục đích                                                     |
+| -------------------------- | ------------------------------------------------------------ |
+| `taskSelector`             | Ứng viên công việc, mặc định `.btn.btn-default`              |
+| `containerSelector`        | Container chính xác của một công việc                        |
+| `urlAttribute`             | Thuộc tính URL bổ sung                                       |
+| `individualRewardSelector` | Nút thưởng lẻ bên trong container                            |
+| `emptySelector`            | Thông báo danh sách rỗng                                     |
+| `facebookScopeSelector`    | Vùng chứa duy nhất nút tương tác đúng mục tiêu trên Facebook |
+| `rewardSuccessSelector`    | Thông báo chỉ xuất hiện khi nhận thưởng thành công           |
+
+Selector chưa xác minh để trống. Không dùng selector quá rộng làm dấu hiệu thành công, ví dụ `body` hoặc container luôn hiển thị. Khi DOM không phù hợp, extension ghi rõ bước lỗi và không tự chuyển tiếp như thể đã thành công. Xử lý lỗi rồi Stop/Start lại.
 
 ## Kiến trúc
 
 ```text
-src/
-  popup/                  React UI, Zustand mirror, CSS
-  background/
-    index.ts              Listener runtime/tabs/alarms và kiểm tra nguồn message
-    workflow-manager.ts   Hàng đợi tuần tự, điều phối, deadline, khôi phục
-    state-machine.ts      Đồ thị chuyển trạng thái và thứ tự trang
-    tab-manager.ts        Mở/focus tab, xác thực URL, chống mở trùng
-  content/
-    tuongtaccheo.ts        MutationObserver, scan theo vùng thay đổi, highlight
-    detection.ts          Nhận diện công việc và nút thưởng
-    facebook.ts           Thông báo dấu hiệu cần đăng nhập, không thao tác tương tác
-  modules/                Interface chung và bốn module LIKE/FOLLOW
-  services/               Storage, messaging, dedupe/hàng đợi
-  config/                 Danh sách trang, cấu hình mặc định, validation
-  types/                  State, Task, Settings, message types
-  utils/                  Chuẩn hóa và xác thực URL Facebook
-public/manifest.json      Manifest MV3
-scripts/build-content.mjs Build content script IIFE riêng
- tests/                   Unit test và HTML fixture
+src/background/automatic-workflow.ts  Điều phối tự động OPEN → FACEBOOK → REWARD
+src/background/workflow-manager.ts   Queue, scan, Start/Stop, timer, storage, thứ tự trang
+src/background/index.ts              Messaging và sự kiện tabs/alarms
+src/background/state-machine.ts      Đồ thị trạng thái
+src/content/source-automation.ts     Bấm nút gốc, thưởng lẻ/nhóm, chờ kết quả
+src/content/facebook.ts              Nhận diện và thực hiện tương tác trên tab đã được giao
+src/content/automatic-runtime.ts     Operation token, hủy khi Stop, MutationObserver bounded
+src/content/automatic-dom.ts         Scope/nhãn nút và tín hiệu kết quả
+src/content/tuongtaccheo.ts           Quét DOM và tải lại danh sách
+src/modules/                         Bốn module công việc
+src/popup/                           React UI, Zustand, chọn chức năng, Start/Stop, nhật ký
+src/services/                        Storage và messaging
+src/types/                           Task, State, operation, settings
 ```
 
-Background là nơi duy nhất thay đổi state. Popup gửi command và theo dõi `storage.onChanged`; đóng popup không mất tiến độ. Mỗi command/message/timer chạy trong một hàng đợi Promise; không có nhiều workflow đồng thời. Cờ Stop được đặt ngay khi nhận command, trước hàng đợi. Báo cáo scan cần đúng tab gốc, trang, URL và token của lần scan, tránh dữ liệu cũ làm thay đổi lượt xử lý mới.
+Một hàng đợi Promise xử lý toàn bộ thay đổi trạng thái trong background. `operation` chứa ID, stage, taskId, tabId và deadline. Ý định được ghi storage trước khi gửi thao tác; khi worker bị tạm dừng, không tự gửi lại cùng click. Kết quả chỉ được chấp nhận từ đúng tab, URL, cửa sổ và operation ID. Có giới hạn 30 giây cho một bước; bộ chờ DOM thường tối đa 20 giây. Message lặp/cũ được bỏ qua.
 
-Storage dùng một bản ghi `state` có version chứa `running`, `currentPageIndex`, `currentTaskId`, `completedTasks`, `skippedTasks`, `settings`, `activityLogs`, `lastTransitionTime`, danh sách công việc, mapping tab, token và deadline. Mỗi chuyển đổi được lưu lại; nhật ký giữ tối đa 250 dòng. Lịch sử ID tồn tại đến khi người dùng xóa, nên cùng URL trên cùng loại trang không được xử lý lại tự động; một URL ở hai loại trang khác nhau có ID riêng.
+Các tên trạng thái nội bộ `WAITING_USER_ACTION` và `WAITING_CONFIRMATION` được giữ cho tương thích storage, nhưng trong chế độ hiện tại chúng lần lượt là **đang bấm nút gốc/chờ tab** và **đang thực hiện/chờ kết quả DOM Facebook**. Không chờ người dùng bấm xác nhận. Các command xác nhận tay cũ không được runtime production tiếp nhận.
 
-### State machine
+`verifiedTasks` ghi nhận tương tác có kết quả DOM; `rewardedTasks` chỉ ghi nhận khi có thông báo thưởng. Tiến độ xác nhận tay từ phiên bản cũ không được tự coi là bằng chứng cho thưởng nhóm. Khi nâng cấp lần đầu từ bản thủ công, workflow chuyển về STOPPED và chờ Start. Lịch sử vẫn được giữ; có thể xóa khi đã Stop.
 
-| Trạng thái             | Điều kiện chuyển tiếp chính                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------- |
-| `STOPPED`              | Start → `IDLE`                                                                           |
-| `IDLE`                 | Tạo/điều hướng tab nguồn → `LOADING_PAGE`                                                |
-| `LOADING_PAGE`         | Content ready / tải xong → `SCANNING_TASKS`                                              |
-| `SCANNING_TASKS`       | Có việc → `TASK_AVAILABLE`; hết việc đã xác minh → `PAGE_COMPLETED`                      |
-| `TASK_AVAILABLE`       | Người dùng mở → `WAITING_USER_ACTION`; bỏ qua → `TASK_COMPLETED`                         |
-| `WAITING_USER_ACTION`  | API mở/focus tab hoàn tất → `WAITING_CONFIRMATION`                                       |
-| `WAITING_CONFIRMATION` | Người dùng xác nhận/bỏ qua → `TASK_COMPLETED`                                            |
-| `TASK_COMPLETED`       | Còn việc → `TASK_AVAILABLE`; hết hàng đợi → `PAGE_COMPLETED`                             |
-| `PAGE_COMPLETED`       | Xác nhận danh sách/thưởng nhóm, bỏ qua trang hoặc rỗng đã xác minh → `WAITING_NEXT_PAGE` |
-| `WAITING_NEXT_PAGE`    | Đến deadline và vẫn running → `LOADING_PAGE` của trang kế tiếp                           |
-| `ERROR`                | Người dùng Quét lại → `SCANNING_TASKS`, hoặc Stop rồi Start                              |
-| Bất kỳ                 | Stop → `STOPPED`; lỗi → `ERROR` và hủy deadline                                          |
+Deadline dùng `setTimeout` và một alarm dự phòng tối thiểu 30 giây. Không có `setInterval` để giữ service worker sống. Nếu worker ngủ hoặc máy ngủ, bước chờ có thể lâu hơn số giây cấu hình. Xem [Chrome alarms](https://developer.chrome.com/docs/extensions/reference/api/alarms). Khi popup đóng, workflow tiếp tục; khi Stop, khôi phục worker vẫn giữ stopped.
 
-MutationObserver có thể cập nhật công việc trong lúc chờ người dùng. Danh sách đã phát hiện của lượt hiện tại là snapshot tích lũy: DOM xóa nút không tự đánh dấu hoàn thành và không làm mất tiến độ nhóm. Người dùng bỏ qua công việc không còn hợp lệ. Không tự chuyển trang chỉ vì đã xác nhận task cuối của trang thưởng lẻ.
+Quyền: `storage`, `alarms` và host Tuongtaccheo/Facebook. Content scripts khai báo tĩnh, không cần quyền scripting. Dữ liệu tiến độ lưu cục bộ; không đọc cookie/mật khẩu, không gửi dữ liệu tới server riêng, không chứa tài khoản hoặc token bí mật.
 
-### Timer và service worker
-
-Không có `setInterval` trong background. Chờ chuyển trang dùng deadline bền vững, `setTimeout` khi worker còn sống và một alarm dự phòng ít nhất 30 giây. Khi worker tỉnh lại, deadline và trạng thái được đọc lại trước hành động. Popup dùng interval 1 giây chỉ để hiển thị countdown.
-
-Khoảng chờ cấu hình tối thiểu 5 giây là **thời gian tối thiểu**, không cam kết chính xác 5 giây nếu worker bị tạm dừng hoặc máy ngủ. Alarm Chrome có thể trễ và bị giới hạn độ phân giải; xem [Chrome alarms](https://developer.chrome.com/docs/extensions/reference/api/alarms) và [service worker lifecycle](https://developer.chrome.com/docs/extensions/develop/concepts/service-workers/lifecycle). Không gọi API giả tạo để giữ worker sống.
-
-Khôi phục trạng thái dừng không tự Start. Tab nguồn mất sẽ báo lỗi. Thao tác mở task bị ngắt giữa chừng khôi phục về chờ xác nhận; khi người dùng mở lại, extension tìm tab cùng URL và opener tab nguồn trước khi tạo tab mới. Nếu tab Facebook đổi URL, tab đó giữ nguyên và thao tác mở tiếp theo có thể tạo tab đúng URL mới. Không có API xóa tab trong dự án.
-
-### Quyền và dữ liệu
-
-Chỉ yêu cầu `storage`, `alarms`, host `https://tuongtaccheo.com/*` và `https://*.facebook.com/*`. Các phương thức Tabs đang dùng không cần quyền `tabs` rộng: host permission liên quan cho phép đọc URL tab phù hợp. Content scripts khai báo tĩnh nên không cần `scripting` hay `activeTab`. Không yêu cầu quyền cookie, không đọc mật khẩu, không chứa token/tài khoản, không gửi dữ liệu tới máy chủ riêng. URL Facebook và tiến độ chỉ nằm trong storage cục bộ của extension.
-
-Dấu hiệu đăng nhập gồm ô password hiển thị trên trang nguồn và URL login/checkpoint hoặc ô password trên Facebook. Đây là tín hiệu hỗ trợ, không phải chứng nhận phiên đăng nhập hoặc kết quả tương tác. Luôn kiểm tra giao diện website thật. Khi mất mạng, selector lỗi, timeout hoặc nút thưởng không rõ, extension dừng điều phối ở ERROR để người dùng xử lý; không retry vô hạn.
-
-## Kiểm thử và giới hạn xác minh
+## Kiểm thử
 
 ```bash
 npm run typecheck
 npm test
 npm run build
-npm audit
 ```
 
-Unit tests dùng Chrome API stub, fake timers và HTML fixture để kiểm tra state machine, thứ tự trang, nhận diện, dedupe, Start/Stop, deadline, worker restore, mapping tab, scan cũ, trang trống, thưởng lẻ/nhóm. Các stub chỉ nằm trong `tests/` và không được đóng gói trong `dist`.
+Tests gồm state machine, vòng trang, selector, dedupe, Start/Stop, retry, worker restore, trực tiếp click nút gốc, luồng tự động, claim nhóm, stale message, chống double click, đúng cửa sổ/opener/URL, kết quả DOM và hủy observer. Chrome API và HTML fixture chỉ được giả lập trong `tests/`, không có dữ liệu giả trong logic chạy chính. Các bài test không thực hiện tương tác hoặc nhận thưởng trên tài khoản thật.
 
-Trước khi dùng trên tài khoản thật, thực hiện smoke test thủ công:
-
-1. Load unpacked, kiểm tra không có lỗi manifest/background trong trang quản lý extension.
-2. Xác minh adapter trên cả bốn trang đăng nhập thật; kiểm tra task và nút chức năng được phân biệt.
-3. Mở công việc, đóng/mở popup, đóng tab Facebook và mở lại; kiểm tra không mất tiến độ.
-4. Stop khi đang countdown; chờ hơn 30 giây, bảo đảm không chuyển trang/mở tab mới.
-5. Thử đóng tab gốc, chuyển URL tab Facebook, mất mạng, đăng xuất, DOM không khớp.
-6. Với VIP: chưa xong danh sách không nhận thưởng nhóm; xác nhận task cuối chưa tự chuyển; tự nhận xu rồi xác nhận riêng mới chuyển.
-7. Dừng service worker qua DevTools rồi mở lại popup, kiểm tra deadline/tiến độ được khôi phục; nếu STOPPED vẫn phải dừng.
-
-Build và unit test không thay thế kiểm chứng DOM đăng nhập thực. Dự án không tự thực hiện giao dịch thưởng hoặc tương tác xã hội trong quá trình kiểm thử.
+Cần kiểm tra trên trang đăng nhập thật sau khi Reload extension để xác nhận các adapter phù hợp DOM hiện tại. Nếu không phù hợp, nhật ký và bước ERROR là thông tin dùng để điều chỉnh; không coi test fixture là kết quả end-to-end trên website.

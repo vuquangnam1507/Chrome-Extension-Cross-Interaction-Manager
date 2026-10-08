@@ -67,17 +67,23 @@ export function socialControl(
       ? { button: available[0], done: false }
       : null;
 }
-export function successMessages(doc: Document, config: AdapterConfig): string[] {
+export function successSignals(
+  doc: Document,
+  config: AdapterConfig,
+): { element: HTMLElement; text: string }[] {
   const explicit = config.rewardSuccessSelector;
   const elements = explicit
     ? [...doc.querySelectorAll<HTMLElement>(explicit)]
     : [...doc.querySelectorAll<HTMLElement>('[role="alert"],.alert,.toast,.swal2-html-container')];
   return elements
     .filter(visible)
-    .map((el) => (el.textContent || '').trim())
+    .map((el) => ({ element: el, text: (el.textContent || '').trim() }))
     .filter(
-      (text) =>
+      ({ text }) =>
         text &&
         (explicit || /nhận(?:\s+\S+){0,6}\s+thành công|đã\s+cộng|cộng\s+[\d.,]+\s*xu/i.test(text)),
     );
+}
+export function successMessages(doc: Document, config: AdapterConfig): string[] {
+  return successSignals(doc, config).map((signal) => signal.text);
 }

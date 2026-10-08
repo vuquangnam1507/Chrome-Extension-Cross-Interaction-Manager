@@ -44,6 +44,10 @@ beforeEach(() => {
           pinned: false,
           highlighted: false,
           incognito: false,
+          selected: true,
+          discarded: false,
+          autoDiscardable: true,
+          groupId: -1,
         };
         tabs.set(10, tab);
         return tab;
@@ -192,7 +196,9 @@ it('claim nhóm chỉ sau đủ kết quả Follow, không claim từng task', a
   expect(
     vi
       .mocked(chrome.tabs.sendMessage)
-      .mock.calls.some(([, m]) => m.operation?.stage === 'CLAIM_REWARD'),
+      .mock.calls.some(
+        ([, m]) => (m as { operation?: { stage: string } }).operation?.stage === 'CLAIM_REWARD',
+      ),
   ).toBe(false);
   await result();
   expect(state.batchRewardConfirmed).toBe(true);
@@ -248,4 +254,23 @@ it('báo cáo từ tab khác hoặc operation cũ không làm tiến bước', a
     task().url,
   );
   expect(state.operation).toEqual(original);
+});
+it('kiểm tra cửa sổ ngay trước click và hủy khi tab được chuyển cửa sổ', async () => {
+  await start();
+  await openFacebook();
+  const id = state.operation!.id;
+  expect(await manager.canAct(11, id)).toBe(true);
+  expect(await manager.canAct(10, id)).toBe(false);
+  tabs.get(11)!.windowId = 8;
+  expect(await manager.canAct(11, id)).toBe(false);
+  await manager.tabAttached(11, 8);
+  expect(state.phase).toBe('ERROR');
+});
+it('tab đổi URL trong lúc đang làm thì hủy trước bước tiếp theo', async () => {
+  await start();
+  await openFacebook();
+  tabs.get(11)!.url = 'https://www.facebook.com/999';
+  await manager.observeTab(tabs.get(11)!);
+  expect(state.phase).toBe('ERROR');
+  expect(state.verifiedTasks).toEqual([]);
 });

@@ -8,19 +8,34 @@ import type { AutoOperation, Command, State, Task } from '../types';
 
 export class AutomaticWorkflowManager extends WorkflowManager {
   async canAct(tabId: number, operationId: string) {
+    const { automationStop } = await chrome.storage.local.get('automationStop');
+    if (automationStop) return false;
     const s = await readState();
     const op = s.operation;
-    if (this.stopped || !s.running || s.phase === 'ERROR' || !op || op.id !== operationId || op.tabId !== tabId || Date.now() >= op.deadline) return false;
+    if (
+      this.stopped ||
+      !s.running ||
+      s.phase === 'ERROR' ||
+      !op ||
+      op.id !== operationId ||
+      op.tabId !== tabId ||
+      Date.now() >= op.deadline
+    )
+      return false;
     const tab = await chrome.tabs.get(tabId);
-    const task = s.tasks.find(t => t.id === op.taskId);
+    const task = s.tasks.find((t) => t.id === op.taskId);
     if (!task || tab.windowId !== s.workflowWindowId) return false;
     return op.stage === 'FACEBOOK_ACTION'
       ? s.taskTabs[task.id] === tabId && facebookUrl(tab.url || '') === task.url
       : s.originTabId === tabId && pageFromUrl(tab.url || '') === task.page;
   }
   tabAttached(tabId: number, windowId: number) {
-    return this.dispatch(async s => {
-      if (s.running && windowId !== s.workflowWindowId && (s.originTabId === tabId || Object.values(s.taskTabs).includes(tabId)))
+    return this.dispatch(async (s) => {
+      if (
+        s.running &&
+        windowId !== s.workflowWindowId &&
+        (s.originTabId === tabId || Object.values(s.taskTabs).includes(tabId))
+      )
         throw Error('Tab workflow đã chuyển sang cửa sổ khác; đã hủy thao tác tự động.');
     });
   }
@@ -114,9 +129,14 @@ export class AutomaticWorkflowManager extends WorkflowManager {
     return this.dispatch(async (s) => {
       const op = s.operation;
       if (s.running && op && tab.id === op.tabId) {
-        const activeTask = s.tasks.find(t => t.id === op.taskId);
-        if (tab.windowId !== s.workflowWindowId || !activeTask ||
-          (op.stage === 'FACEBOOK_ACTION' ? facebookUrl(tab.url || '') !== activeTask.url : pageFromUrl(tab.url || '') !== activeTask.page))
+        const activeTask = s.tasks.find((t) => t.id === op.taskId);
+        if (
+          tab.windowId !== s.workflowWindowId ||
+          !activeTask ||
+          (op.stage === 'FACEBOOK_ACTION'
+            ? facebookUrl(tab.url || '') !== activeTask.url
+            : pageFromUrl(tab.url || '') !== activeTask.page)
+        )
           throw Error('Tab đang thực thi đã đổi URL hoặc cửa sổ; đã hủy thao tác.');
       }
       if (!s.running || this.stopped || !op || op.stage !== 'OPEN_TASK' || tab.id === undefined)
