@@ -24,6 +24,21 @@ const likedNames = ['bỏ thích', 'unlike', 'đã thích', 'liked', 'gỡ thíc
 const normalizeLabel = (value: string) => value.replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi');
 // Read independent semantic signals: aria-label can remain "Like" while the
 // visible label or a descendant control changes. Never infer success from color/count.
+function visibleControlText(node: HTMLElement): string {
+  return [...node.childNodes]
+    .map((child) => {
+      if (child.nodeType === Node.TEXT_NODE) return child.textContent || '';
+      if (
+        !(child instanceof HTMLElement) ||
+        !visible(child) ||
+        child.matches('[hidden],[inert],[aria-hidden="true"]') ||
+        child.matches(controlSelector)
+      )
+        return '';
+      return visibleControlText(child);
+    })
+    .join('');
+}
 function explicitlyLiked(button: HTMLElement): boolean {
   const nodes = [
     button,
@@ -35,7 +50,7 @@ function explicitlyLiked(button: HTMLElement): boolean {
     if (!visible(node)) return false;
     return (
       node.getAttribute('aria-pressed') === 'true' ||
-      [node.getAttribute('aria-label'), node.getAttribute('title'), node.textContent].some(
+      [node.getAttribute('aria-label'), node.getAttribute('title'), visibleControlText(node)].some(
         (value) => value != null && likedNames.includes(normalizeLabel(value)),
       )
     );

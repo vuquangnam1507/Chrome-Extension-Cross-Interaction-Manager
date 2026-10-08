@@ -1,7 +1,7 @@
 import './source-automation';
 import { pageFromUrl } from '../config/pages';
 import type { AdapterConfig, PageId, Task, Scan } from '../types';
-import { interactive, visible, rewardElements } from './detection';
+import { interactive, loginRequired, scanDiagnostic, rewardElements } from './detection';
 import { emptyListVisible, reloadListButton } from './empty-list';
 import { readState } from '../services/storage.service';
 import { detect } from './detection';
@@ -44,11 +44,9 @@ function emit(full = false) {
     }
     const tasks = [...new Map([...cache.values()].flat().map((t) => [t.id, t])).values()];
     let status: Scan['status'] = tasks.length ? 'ok' : 'unknown';
-    let detail =
-      'Không nhận diện được công việc. Kiểm tra đăng nhập, selector và URL trong adapter; không tự coi là hết việc.';
+    const detail = tasks.length ? '' : scanDiagnostic(document, config);
     if (!navigator.onLine) status = 'offline';
-    else if ([...document.querySelectorAll<HTMLElement>('input[type="password"]')].some(visible))
-      status = 'login';
+    else if (loginRequired(document)) status = 'login';
     else if (!tasks.length && emptyListVisible(document, config)) status = 'empty';
     if ((status === 'unknown' || status === 'empty') && Date.now() < readyAt) {
       clearTimeout(settleTimer);

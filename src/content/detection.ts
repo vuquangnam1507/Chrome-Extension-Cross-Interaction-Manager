@@ -50,3 +50,24 @@ export function rewardElements(
       ?.querySelectorAll<HTMLElement>(c.individualRewardSelector) || []),
   ].filter(interactive);
 }
+
+// Observed on /kiemtien/subcheofbvip/ when the session is absent:
+// <h4>HÃY ĐĂNG NHẬP ĐỂ SỬ DỤNG</h4>, with no password input.
+export function loginRequired(root: ParentNode): boolean {
+  if ([...root.querySelectorAll<HTMLElement>('input[type="password"]')].some(visible)) return true;
+  return [...root.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6,[role="heading"]')].some(
+    (el) =>
+      visible(el) &&
+      (el.textContent || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase('vi') ===
+        'hãy đăng nhập để sử dụng',
+  );
+}
+export function scanDiagnostic(root: ParentNode, config: AdapterConfig): string {
+  const candidates = [...root.querySelectorAll<HTMLElement>(config.taskSelector)];
+  const active = candidates.filter(interactive).length;
+  if (!candidates.length)
+    return `Không tìm thấy nút khớp selector ${config.taskSelector}. Danh sách có thể chưa tải hoặc adapter chưa khớp HTML trang này.`;
+  if (!active)
+    return `Tìm thấy ${candidates.length} nút nhưng chưa có nút hiển thị và tương tác được. Kiểm tra trạng thái tải danh sách.`;
+  return `Tìm thấy ${active} nút tương tác nhưng chưa trích xuất được URL Facebook hợp lệ của công việc. Cần kiểm tra outerHTML nút nhiệm vụ trên trang này; không tự coi là hết việc.`;
+}

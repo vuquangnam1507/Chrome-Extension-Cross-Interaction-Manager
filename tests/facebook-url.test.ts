@@ -24,3 +24,20 @@ it('URL redirect chỉ được chấp nhận khi có URL tài liệu đã xác 
     matchesFacebookOperation('https://www.facebook.com/999', 'https://www.facebook.com/123', alias),
   ).toBe(false);
 });
+
+it('permalink đã xác minh vẫn là cùng bài khi Facebook đổi tracking, hash, hostname và dấu slash', () => {
+  expect(
+    matchesFacebookOperation(
+      'https://m.facebook.com/person/posts/pfbidABC/?rdid=new&locale=vi_VN#comments',
+      'https://www.facebook.com/123',
+      'https://www.facebook.com/person/posts/pfbidABC',
+    ),
+  ).toBe(true);
+  expect(
+    matchesFacebookOperation(
+      'https://www.facebook.com/person/posts/pfbidOTHER',
+      'https://www.facebook.com/123',
+      'https://www.facebook.com/person/posts/pfbidABC',
+    ),
+  ).toBe(false);
+});

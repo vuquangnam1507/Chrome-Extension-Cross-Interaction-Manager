@@ -217,17 +217,30 @@ export class AutomaticWorkflowManager extends WorkflowManager {
   }
   observeTab(tab: chrome.tabs.Tab, ready = false, reportedUrl = tab.url || '') {
     return this.dispatch(async (s) => {
+      // Events can wait behind other messages. Validate the current tab, not a
+      // stale onUpdated snapshot from before Facebook finished canonicalizing its URL.
+      if (tab.id === undefined) return;
+      try {
+        tab = await chrome.tabs.get(tab.id);
+      } catch {
+        return; // onRemoved handles closure; never act on an obsolete snapshot.
+      }
       const op = s.operation;
       if (s.running && op && tab.id === op.tabId) {
         const activeTask = s.tasks.find((t) => t.id === op.taskId);
+        if (tab.windowId !== s.workflowWindowId)
+          throw Error(
+            `Tab đang thực thi đã chuyển cửa sổ (${s.workflowWindowId} → ${tab.windowId}); đã hủy thao tác.`,
+          );
         if (
-          tab.windowId !== s.workflowWindowId ||
           !activeTask ||
           (op.stage === 'FACEBOOK_ACTION'
             ? !matchesFacebookOperation(tab.url || '', activeTask.url, op.documentUrl)
             : pageFromUrl(tab.url || '') !== activeTask.page)
         )
-          throw Error('Tab đang thực thi đã đổi URL hoặc cửa sổ; đã hủy thao tác.');
+          throw Error(
+            'Tab đang thực thi đã chuyển sang URL không khớp công việc hoặc permalink đã xác minh; đã hủy thao tác.',
+          );
       }
       this.candidate(
         s,

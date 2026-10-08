@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, it, expect, vi } from 'vitest';
 import fixture from './fixtures/tasks.html?raw';
-import { detect, rewardElements } from '../src/content/detection';
+import { detect, rewardElements, loginRequired, scanDiagnostic } from '../src/content/detection';
 import { defaultSettings } from '../src/config/pages';
 import { facebookUrl } from '../src/utils/url';
 import { modules } from '../src/modules';
@@ -113,4 +113,22 @@ it('chỉ chọn nút tải lại rõ ràng, không chọn nút nhiệm vụ ho�
   expect(() => reloadListButton(document)).toThrow();
   document.body.innerHTML = '<button>Tải lại</button><button>Tải lại danh sách</button>';
   expect(() => reloadListButton(document)).toThrow('Có nhiều');
+});
+
+it('nhận biết trang Follow VIP yêu cầu đăng nhập dù không có ô mật khẩu', () => {
+  document.body.innerHTML =
+    '<h4>HÃY ĐĂNG NHẬP ĐỂ SỬ DỤNG</h4><p><a href="https://tuongtaccheo.com/">Đăng nhập ngay</a></p>';
+  expect(loginRequired(document)).toBe(true);
+});
+it('không báo chưa đăng nhập chỉ vì có liên kết đăng nhập hoặc thông báo ẩn', () => {
+  document.body.innerHTML = '<a>Đăng nhập</a><div hidden><h4>HÃY ĐĂNG NHẬP ĐỂ SỬ DỤNG</h4></div>';
+  expect(loginRequired(document)).toBe(false);
+});
+it('chẩn đoán riêng selector không khớp và nút thiếu URL', () => {
+  document.body.innerHTML = '';
+  expect(scanDiagnostic(document, c)).toContain('Không tìm thấy nút khớp selector');
+  document.body.innerHTML = '<button class="btn btn-default">Follow</button>';
+  expect(scanDiagnostic(document, c)).toContain('chưa trích xuất được URL');
+  document.querySelector('button')!.disabled = true;
+  expect(scanDiagnostic(document, c)).toContain('chưa có nút hiển thị và tương tác');
 });

@@ -416,3 +416,30 @@ it('Stop khi đang ghép tab thì mọi sự kiện điều hướng đến mu�
   expect(state.phase).toBe('STOPPED');
   expect(state.operation).toBeNull();
 });
+
+it('URL permalink đã xác minh đổi tracking trong bước Like không hủy thao tác', async () => {
+  await start();
+  await openFacebook();
+  state.operation!.documentUrl = 'https://www.facebook.com/person/posts/pfbidABC';
+  tabs.get(11)!.url = 'https://m.facebook.com/person/posts/pfbidABC/?rdid=new';
+  const operationId = state.operation!.id;
+  await manager.observeTab(tabs.get(11)!);
+  expect(state.phase).not.toBe('ERROR');
+  expect(await manager.canAct(11, operationId)).toBe(true);
+});
+it('sự kiện URL cũ trong hàng đợi không hủy tab hiện tại vẫn đúng nhiệm vụ', async () => {
+  await start();
+  await openFacebook();
+  const snapshot = { ...tabs.get(11)!, url: 'about:blank' };
+  await manager.observeTab(snapshot);
+  expect(state.operation?.stage).toBe('FACEBOOK_ACTION');
+  expect(state.running).toBe(true);
+});
+it('sự kiện cũ đúng URL không che giấu tab hiện đã sang bài khác', async () => {
+  await start();
+  await openFacebook();
+  const snapshot = { ...tabs.get(11)! };
+  tabs.get(11)!.url = 'https://www.facebook.com/999';
+  await manager.observeTab(snapshot);
+  expect(state.phase).toBe('ERROR');
+});

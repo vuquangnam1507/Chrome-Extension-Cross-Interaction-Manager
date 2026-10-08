@@ -58,7 +58,6 @@ export function matchesFacebookOperation(
   documentUrl?: string,
 ): boolean {
   return (
-    sameFacebookTarget(actual, target) ||
-    (!!documentUrl && !!facebookUrl(actual) && facebookUrl(actual) === facebookUrl(documentUrl))
+    sameFacebookTarget(actual, target) || (!!documentUrl && sameFacebookTarget(actual, documentUrl))
   );
 }

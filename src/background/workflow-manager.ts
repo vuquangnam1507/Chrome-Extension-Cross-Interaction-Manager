@@ -188,7 +188,9 @@ export class WorkflowManager {
       if (s.operation) return;
       s.loadDeadline = null;
       if (report.status === 'login')
-        throw Error('Tuongtaccheo có dấu hiệu chưa đăng nhập. Đăng nhập ở tab gốc rồi Quét lại.');
+        throw Error(
+          'Tuongtaccheo yêu cầu đăng nhập. Đăng nhập tại tab gốc trong đúng hồ sơ Chrome đang chạy extension, rồi bấm Start lại.',
+        );
       if (report.status === 'offline') throw Error('Mất kết nối mạng. Kết nối lại rồi Quét lại.');
       if (report.status === 'unknown') {
         s.emptyRetryAt = null;
