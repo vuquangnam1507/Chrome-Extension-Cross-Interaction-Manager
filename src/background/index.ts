@@ -20,7 +20,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     else if (message?.type === 'READY' && pageFromUrl(sender.url || ''))
       result = manager.pageReady(id);
     else if (message?.type === 'FB_READY')
-      result = chrome.tabs.get(id).then((tab) => manager.observeTab(tab));
+      result = chrome.tabs.get(id).then((tab) => manager.observeTab(tab, true));
     else if (
       message?.type === 'AUTO_RESULT' &&
       typeof message.operationId === 'string' &&
@@ -58,3 +58,13 @@ chrome.tabs.onUpdated.addListener((id, info, tab) => {
   if (info.url || info.status === 'complete') void manager.observeTab(tab);
 });
 void manager.restore();
+
+chrome.webNavigation.onCreatedNavigationTarget.addListener((event) => {
+  void manager.navigationTarget(event);
+});
+chrome.webNavigation.onCommitted.addListener(
+  (event) => {
+    void manager.navigationCommitted(event);
+  },
+  { url: [{ schemes: ['https'], hostSuffix: 'facebook.com' }] },
+);

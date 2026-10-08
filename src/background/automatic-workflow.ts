@@ -2,7 +2,7 @@ import { WorkflowManager } from './workflow-manager';
 import { transition } from './state-machine';
 import { readState, saveState } from '../services/storage.service';
 import { pending, batchComplete } from '../services/task.service';
-import { facebookUrl } from '../utils/url';
+import { facebookUrl, sameFacebookTarget, matchesFacebookOperation } from '../utils/url';
 import { pageFromUrl } from '../config/pages';
 import type { AutoOperation, Command, State, Task } from '../types';
 
@@ -26,7 +26,8 @@ export class AutomaticWorkflowManager extends WorkflowManager {
     const task = s.tasks.find((t) => t.id === op.taskId);
     if (!task || tab.windowId !== s.workflowWindowId) return false;
     return op.stage === 'FACEBOOK_ACTION'
-      ? s.taskTabs[task.id] === tabId && facebookUrl(tab.url || '') === task.url
+      ? s.taskTabs[task.id] === tabId &&
+          matchesFacebookOperation(tab.url || '', task.url, op.documentUrl)
       : s.originTabId === tabId && pageFromUrl(tab.url || '') === task.page;
   }
   tabAttached(tabId: number, windowId: number) {
@@ -56,18 +57,39 @@ export class AutomaticWorkflowManager extends WorkflowManager {
     }
     return super.command(c);
   }
-  private async begin(s: State, stage: AutoOperation['stage'], task: Task, tabId: number) {
+  private async begin(
+    s: State,
+    stage: AutoOperation['stage'],
+    task: Task,
+    tabId: number,
+    documentUrl?: string,
+  ) {
     const tab = await chrome.tabs.get(tabId);
     if (this.stopped || !s.running) return;
     if (s.workflowWindowId === null || tab.windowId !== s.workflowWindowId)
       throw Error('Tab không thuộc cửa sổ Chrome của workflow.');
     if (stage === 'FACEBOOK_ACTION') {
-      if (s.taskTabs[task.id] !== tabId || facebookUrl(tab.url || '') !== task.url)
+      if (
+        s.taskTabs[task.id] !== tabId ||
+        !matchesFacebookOperation(tab.url || '', task.url, documentUrl)
+      )
         throw Error('Tab Facebook đã đổi URL hoặc không thuộc công việc hiện tại.');
     } else if (s.originTabId !== tabId || pageFromUrl(tab.url || '') !== task.page) {
       throw Error('Tab nguồn đã đổi trang; không tiếp tục thao tác.');
     }
+    const existingTabs =
+      stage === 'OPEN_TASK' ? await chrome.tabs.query({ windowId: s.workflowWindowId }) : [];
+    if (this.stopped) return;
     s.operation = {
+      ...(documentUrl ? { documentUrl } : {}),
+      ...(stage === 'OPEN_TASK'
+        ? {
+            opening: {
+              existingTabIds: existingTabs.flatMap((t) => (t.id === undefined ? [] : [t.id])),
+              candidates: [],
+            },
+          }
+        : {}),
       id: crypto.randomUUID(),
       stage,
       taskId: task.id,
@@ -125,7 +147,69 @@ export class AutomaticWorkflowManager extends WorkflowManager {
     } else transition(s, 'PAGE_COMPLETED');
     await this.advance(s);
   }
-  observeTab(tab: chrome.tabs.Tab) {
+  private candidate(
+    s: State,
+    tab: chrome.tabs.Tab,
+    sourceKnown = false,
+    requestedUrl = '',
+    ready = false,
+  ) {
+    const op = s.operation;
+    if (
+      !s.running ||
+      this.stopped ||
+      !op ||
+      op.stage !== 'OPEN_TASK' ||
+      !op.opening ||
+      tab.id === undefined ||
+      tab.id === s.originTabId ||
+      tab.windowId !== s.workflowWindowId ||
+      op.opening.existingTabIds.includes(tab.id)
+    )
+      return null;
+    const task = s.tasks.find((t) => t.id === op.taskId);
+    if (!task) return null;
+    let candidate = op.opening.candidates.find((c) => c.tabId === tab.id);
+    sourceKnown = sourceKnown || tab.openerTabId === s.originTabId;
+    if (!candidate) {
+      if (!sourceKnown && !ready) return null;
+      if (op.opening.candidates.length >= 20) return null;
+      candidate = { tabId: tab.id, sourceKnown: false, requestedSeen: false, ready: false };
+      op.opening.candidates.push(candidate);
+    }
+    if (sourceKnown && !candidate.sourceKnown) {
+      candidate.sourceKnown = true;
+      this.log(s, `Đã nhận nguồn mở tab ${tab.id} từ trang công việc.`);
+    }
+    candidate.ready ||= ready;
+    candidate.requestedSeen ||= [requestedUrl, tab.pendingUrl || '', tab.url || ''].some((url) =>
+      sameFacebookTarget(url, task.url),
+    );
+    return candidate;
+  }
+  private async attachReadyTab(s: State, tab: chrome.tabs.Tab) {
+    const op = s.operation;
+    const candidate = op?.opening?.candidates.find((c) => c.tabId === tab.id);
+    const task = s.tasks.find((t) => t.id === op?.taskId);
+    if (
+      !op ||
+      op.stage !== 'OPEN_TASK' ||
+      !candidate?.sourceKnown ||
+      !candidate.requestedSeen ||
+      !task ||
+      tab.id === undefined ||
+      tab.windowId !== s.workflowWindowId
+    )
+      return;
+    if (!matchesFacebookOperation(tab.url || '', task.url, candidate.documentUrl)) return;
+    s.taskTabs[task.id] = tab.id;
+    if (!candidate.ready && tab.status !== 'complete') return;
+    this.log(s, `Đã ghép tab Facebook ${tab.id}; chuyển sang thực hiện ${task.kind}.`);
+    s.operation = null;
+    transition(s, 'WAITING_CONFIRMATION');
+    await this.begin(s, 'FACEBOOK_ACTION', task, tab.id, facebookUrl(tab.url || '')!);
+  }
+  observeTab(tab: chrome.tabs.Tab, ready = false) {
     return this.dispatch(async (s) => {
       const op = s.operation;
       if (s.running && op && tab.id === op.tabId) {
@@ -134,27 +218,99 @@ export class AutomaticWorkflowManager extends WorkflowManager {
           tab.windowId !== s.workflowWindowId ||
           !activeTask ||
           (op.stage === 'FACEBOOK_ACTION'
-            ? facebookUrl(tab.url || '') !== activeTask.url
+            ? !matchesFacebookOperation(tab.url || '', activeTask.url, op.documentUrl)
             : pageFromUrl(tab.url || '') !== activeTask.page)
         )
           throw Error('Tab đang thực thi đã đổi URL hoặc cửa sổ; đã hủy thao tác.');
       }
-      if (!s.running || this.stopped || !op || op.stage !== 'OPEN_TASK' || tab.id === undefined)
-        return;
-      const task = s.tasks.find((t) => t.id === op.taskId);
+      this.candidate(s, tab, false, '', ready);
+      await this.attachReadyTab(s, tab);
+    });
+  }
+  navigationTarget(event: {
+    sourceTabId: number;
+    sourceFrameId: number;
+    tabId: number;
+    url: string;
+  }) {
+    return this.dispatch(async (s) => {
       if (
-        !task ||
-        tab.openerTabId !== s.originTabId ||
-        tab.windowId !== s.workflowWindowId ||
-        facebookUrl(tab.url || tab.pendingUrl || '') !== task.url
+        !s.running ||
+        this.stopped ||
+        s.operation?.stage !== 'OPEN_TASK' ||
+        event.sourceTabId !== s.originTabId ||
+        event.sourceFrameId !== 0
       )
         return;
-      s.taskTabs[task.id] = tab.id;
-      if (tab.status !== 'complete') return;
-      s.operation = null;
-      transition(s, 'WAITING_CONFIRMATION');
-      await this.begin(s, 'FACEBOOK_ACTION', task, tab.id);
+      let tab: chrome.tabs.Tab;
+      try {
+        tab = await chrome.tabs.get(event.tabId);
+      } catch {
+        return;
+      }
+      this.candidate(s, tab, true, event.url);
+      await this.attachReadyTab(s, tab);
     });
+  }
+  navigationCommitted(event: {
+    tabId: number;
+    frameId: number;
+    url: string;
+    transitionType: string;
+    transitionQualifiers: string[];
+  }) {
+    return this.dispatch(async (s) => {
+      if (!s.running || this.stopped || s.operation?.stage !== 'OPEN_TASK' || event.frameId !== 0)
+        return;
+      let tab: chrome.tabs.Tab;
+      try {
+        tab = await chrome.tabs.get(event.tabId);
+      } catch {
+        return;
+      }
+      const candidate = this.candidate(s, tab);
+      if (!candidate?.sourceKnown) return;
+      const task = s.tasks.find((t) => t.id === s.operation!.taskId)!;
+      const manual =
+        event.transitionType === 'typed' ||
+        event.transitionQualifiers.some((q) => ['from_address_bar', 'forward_back'].includes(q));
+      const redirected = event.transitionQualifiers.some((q) =>
+        ['server_redirect', 'client_redirect'].includes(q),
+      );
+      if (manual) {
+        candidate.sourceKnown = false;
+        candidate.requestedSeen = false;
+        candidate.documentUrl = undefined;
+        return;
+      }
+      if (sameFacebookTarget(event.url, task.url)) candidate.requestedSeen = true;
+      else if (candidate.requestedSeen && redirected && facebookUrl(event.url)) {
+        candidate.documentUrl = facebookUrl(event.url)!;
+        this.log(s, `Đã xác minh chuyển hướng Facebook trong tab ${event.tabId}.`);
+      }
+      await this.attachReadyTab(s, tab);
+    });
+  }
+  private async reconcileOpening() {
+    const s = await readState();
+    if (
+      !s.running ||
+      this.stopped ||
+      s.operation?.stage !== 'OPEN_TASK' ||
+      s.workflowWindowId === null
+    )
+      return;
+    const tabs = await chrome.tabs.query({ windowId: s.workflowWindowId });
+    for (const tab of tabs) await this.observeTab(tab);
+  }
+  override async restore() {
+    await super.restore();
+    await this.reconcileOpening();
+    return readState();
+  }
+  override async wake() {
+    await this.reconcileOpening();
+    return super.wake();
   }
   automaticResult(
     message: { operationId: string; ok: boolean; verified?: boolean; detail?: string },
@@ -169,7 +325,7 @@ export class AutomaticWorkflowManager extends WorkflowManager {
       if (!task || tab.windowId !== s.workflowWindowId) throw Error('Tab đã rời phạm vi workflow.');
       if (
         op.stage === 'FACEBOOK_ACTION'
-          ? facebookUrl(url) !== task.url
+          ? !matchesFacebookOperation(url, task.url, op.documentUrl)
           : pageFromUrl(url) !== task.page
       )
         throw Error('URL thay đổi khi đang thực hiện công việc.');

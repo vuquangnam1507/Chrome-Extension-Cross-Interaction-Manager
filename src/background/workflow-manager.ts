@@ -53,10 +53,22 @@ export class WorkflowManager {
   async wake() {
     return this.dispatch(async (s) => {
       if (!s.running || this.stopped) return;
-      if (s.operation && Date.now() >= s.operation.deadline)
+      if (s.operation && Date.now() >= s.operation.deadline) {
+        if (s.operation.stage === 'OPEN_TASK') {
+          const candidates = s.operation.opening?.candidates || [];
+          const source = candidates.filter((c) => c.sourceKnown);
+          throw Error(
+            source.length
+              ? `Đã thấy tab mở từ nguồn (${source.map((c) => c.tabId).join(', ')}), nhưng chưa xác minh được URL Facebook hoặc trang chưa sẵn sàng. Xem nhật ký ghép tab.`
+              : candidates.length
+                ? 'Đã thấy tab Facebook nhưng chưa xác minh được tab mở từ trang nguồn. Kiểm tra quyền webNavigation sau khi Reload extension.'
+                : 'Chưa nhận được tab mở từ công việc. Kiểm tra popup bị chặn và quyền webNavigation; extension không tự bấm mở lại.',
+          );
+        }
         throw Error(
           `Hết thời gian tại bước ${s.operation.stage}. Không tự lặp lại thao tác chưa rõ kết quả.`,
         );
+      }
       if (s.emptyRetryAt !== null && Date.now() >= s.emptyRetryAt) {
         s.emptyRetryAt = null;
         s.emptyRetryCount++;

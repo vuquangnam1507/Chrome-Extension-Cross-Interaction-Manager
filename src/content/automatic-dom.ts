@@ -1,7 +1,8 @@
 import { interactive, visible } from './detection';
-import { facebookUrl } from '../utils/url';
+import { sameFacebookTarget } from '../utils/url';
 import type { AdapterConfig, Task } from '../types';
 export const controlSelector = 'button,a,[role="button"],input[type="button"],input[type="submit"]';
+export const likeMarkerSelector = '[data-ad-rendering-role="like_button"]';
 export const labelOf = (el: HTMLElement) =>
   (
     el.getAttribute('aria-label') ||
@@ -29,8 +30,8 @@ export function facebookScope(doc: Document, task: Task, config: AdapterConfig):
       visible,
     );
     const matches = articles.filter((el) =>
-      [...el.querySelectorAll<HTMLAnchorElement>('a[href]')].some(
-        (a) => facebookUrl(a.href) === task.url,
+      [...el.querySelectorAll<HTMLAnchorElement>('a[href]')].some((a) =>
+        sameFacebookTarget(a.href, task.url),
       ),
     );
     if (matches.length === 1) return matches[0];
@@ -56,16 +57,44 @@ export function socialControl(
     root,
     kind === 'LIKE' ? ['bỏ thích', 'unlike'] : ['đang theo dõi', 'following'],
   );
-  const pressed = actions.filter((el) => el.getAttribute('aria-pressed') === 'true');
-  const available = actions.filter((el) => el.getAttribute('aria-pressed') !== 'true');
-  if (done.length + pressed.length + available.length > 1)
-    throw Error('Nhiều nút tương tác phù hợp; dừng để tránh bấm nhầm.');
-  const completed = done[0] || pressed[0];
-  return completed
-    ? { button: completed, done: true }
-    : available[0]
-      ? { button: available[0], done: false }
-      : null;
+  const candidates = new Map<HTMLElement, boolean>();
+  for (const el of actions) candidates.set(el, el.getAttribute('aria-pressed') === 'true');
+  for (const el of done) candidates.set(el, true);
+  if (kind === 'LIKE') {
+    for (const marker of root.querySelectorAll<HTMLElement>(likeMarkerSelector)) {
+      // Facebook can use an empty marker inside the actual clickable control.
+      // Its own rectangle may be empty; use the associated visible button instead.
+      if (marker.closest('[hidden],[inert],[aria-hidden="true"],[disabled],[aria-disabled="true"]'))
+        continue;
+      const style = getComputedStyle(marker);
+      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
+        continue;
+      const ancestor = marker.closest<HTMLElement>(controlSelector);
+      let button: HTMLElement | undefined;
+      if (ancestor && (!(root instanceof Node) || !root.contains(ancestor))) continue;
+      if (ancestor && root instanceof Node && root.contains(ancestor)) {
+        if (interactive(ancestor)) button = ancestor;
+      } else {
+        const children = [...marker.querySelectorAll<HTMLElement>(controlSelector)].filter(
+          interactive,
+        );
+        if (children.length > 1)
+          throw Error('Nhiều nút trong vùng Like; không xác định được nút cần bấm.');
+        button = children[0] || (interactive(marker) ? marker : undefined);
+      }
+      if (!button) continue;
+      const alreadyLiked =
+        candidates.get(button) === true ||
+        button.getAttribute('aria-pressed') === 'true' ||
+        marker.getAttribute('aria-pressed') === 'true' ||
+        ['bỏ thích', 'unlike'].includes(labelOf(button)) ||
+        ['bỏ thích', 'unlike'].includes(labelOf(marker));
+      candidates.set(button, alreadyLiked);
+    }
+  }
+  if (candidates.size > 1) throw Error('Nhiều nút tương tác phù hợp; dừng để tránh bấm nhầm.');
+  const candidate = candidates.entries().next().value;
+  return candidate ? { button: candidate[0], done: candidate[1] } : null;
 }
 export function successSignals(
   doc: Document,

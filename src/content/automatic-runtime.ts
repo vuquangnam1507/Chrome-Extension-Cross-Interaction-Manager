@@ -1,6 +1,6 @@
 import type { AdapterConfig, AutoOperation, Task } from '../types';
 import { pageFromUrl } from '../config/pages';
-import { facebookUrl } from '../utils/url';
+import { matchesFacebookOperation } from '../utils/url';
 export interface AutoRequest {
   type: 'AUTO_STEP';
   operation: AutoOperation;
@@ -51,7 +51,7 @@ export function installAutomaticHandler(
         throw Error('Workflow đã dừng hoặc bước đã hết hiệu lực.');
       if (
         m.operation.stage === 'FACEBOOK_ACTION'
-          ? facebookUrl(location.href) !== m.task.url
+          ? !matchesFacebookOperation(location.href, m.task.url, m.operation.documentUrl)
           : pageFromUrl(location.href) !== m.task.page
       )
         throw Error('URL hiện tại không thuộc công việc.');

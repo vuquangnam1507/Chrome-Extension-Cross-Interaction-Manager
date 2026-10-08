@@ -33,6 +33,9 @@ beforeEach(() => {
     },
     alarms: { clear: vi.fn(async () => true), create: vi.fn(async () => {}) },
     tabs: {
+      query: vi.fn(async ({ windowId }) =>
+        [...tabs.values()].filter((t) => t.windowId === windowId),
+      ),
       create: vi.fn(async ({ url, windowId }) => {
         const tab = {
           id: 10,
@@ -273,4 +276,141 @@ it('tab đổi URL trong lúc đang làm thì hủy trước bước tiếp theo
   await manager.observeTab(tabs.get(11)!);
   expect(state.phase).toBe('ERROR');
   expect(state.verifiedTasks).toEqual([]);
+});
+it('tab thiếu opener: dùng nguồn mở từ webNavigation và không chờ tải tài nguyên xong', async () => {
+  await start();
+  const tab = {
+    ...tabs.get(10)!,
+    id: 11,
+    url: 'about:blank',
+    status: 'loading' as chrome.tabs.TabStatus,
+  };
+  tabs.set(11, tab);
+  await manager.observeTab(tab);
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 0, tabId: 11, url: task().url });
+  tab.url = 'https://m.facebook.com/123/?ref=source&rdid=tracking';
+  await manager.observeTab(tab, true);
+  expect(state.operation?.stage).toBe('FACEBOOK_ACTION');
+  expect(state.taskTabs[task().id]).toBe(11);
+  expect(await manager.canAct(11, state.operation!.id)).toBe(true);
+});
+it('FB_READY đến trước nguồn điều hướng vẫn ghép tab khi bằng chứng nguồn tới sau', async () => {
+  await start();
+  const tab = {
+    ...tabs.get(10)!,
+    id: 11,
+    url: task().url,
+    status: 'loading' as chrome.tabs.TabStatus,
+  };
+  tabs.set(11, tab);
+  await manager.observeTab(tab, true);
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 0, tabId: 11, url: task().url });
+  expect(state.operation?.stage).toBe('FACEBOOK_ACTION');
+});
+it('webNavigation không nhận tab mở từ nguồn khác hoặc iframe', async () => {
+  await start();
+  const tab = { ...tabs.get(10)!, id: 11, url: task().url };
+  tabs.set(11, tab);
+  await manager.observeTab(tab, true);
+  await manager.navigationTarget({ sourceTabId: 99, sourceFrameId: 0, tabId: 11, url: task().url });
+  await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 2, tabId: 11, url: task().url });
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  expect(state.taskTabs).toEqual({});
+});
+it('không chiếm tab Facebook đã có trước click dù URL và opener đều khớp', async () => {
+  const tab: chrome.tabs.Tab = {
+    id: 20,
+    url: task().url,
+    openerTabId: 10,
+    windowId: 7,
+    status: 'complete',
+    index: 0,
+    active: false,
+    pinned: false,
+    highlighted: false,
+    incognito: false,
+    selected: false,
+    discarded: false,
+    autoDiscardable: true,
+    groupId: -1,
+  };
+  tabs.set(20, tab);
+  await start();
+  await manager.observeTab(tab, true);
+  await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 0, tabId: 20, url: task().url });
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  expect(state.taskTabs).toEqual({});
+});
+it('chuyển hướng đã xác minh từ URL số sang permalink mới được dùng xuyên suốt thao tác', async () => {
+  await start();
+  const tab = {
+    ...tabs.get(10)!,
+    id: 11,
+    url: 'https://www.facebook.com/person/posts/pfbidABC',
+    status: 'loading' as chrome.tabs.TabStatus,
+  };
+  tabs.set(11, tab);
+  await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 0, tabId: 11, url: task().url });
+  await manager.observeTab(tab, true);
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  await manager.navigationCommitted({
+    tabId: 11,
+    frameId: 0,
+    url: tab.url,
+    transitionType: 'link',
+    transitionQualifiers: ['server_redirect'],
+  });
+  expect(state.operation?.stage).toBe('FACEBOOK_ACTION');
+  expect(state.operation?.documentUrl).toBe(tab.url);
+  expect(await manager.canAct(11, state.operation!.id)).toBe(true);
+  await result();
+  expect(state.operation?.stage).toBe('CLAIM_REWARD');
+});
+it('URL khác không có bằng chứng redirect không được nhận chỉ vì tab mở cùng nguồn', async () => {
+  await start();
+  const tab = { ...tabs.get(10)!, id: 11, url: 'https://www.facebook.com/999' };
+  tabs.set(11, tab);
+  await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 0, tabId: 11, url: task().url });
+  await manager.navigationCommitted({
+    tabId: 11,
+    frameId: 0,
+    url: tab.url,
+    transitionType: 'link',
+    transitionQualifiers: [],
+  });
+  await manager.observeTab(tab, true);
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+});
+it('worker restore tìm lại tab đã có nguồn xác minh mà không bấm mở lần hai', async () => {
+  await start();
+  const tab = {
+    ...tabs.get(10)!,
+    id: 11,
+    url: 'about:blank',
+    status: 'loading' as chrome.tabs.TabStatus,
+  };
+  tabs.set(11, tab);
+  await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 0, tabId: 11, url: task().url });
+  vi.clearAllTimers();
+  tab.url = task().url;
+  tab.status = 'complete';
+  manager = new AutomaticWorkflowManager();
+  await manager.restore();
+  expect(state.operation?.stage).toBe('FACEBOOK_ACTION');
+  const sent = vi
+    .mocked(chrome.tabs.sendMessage)
+    .mock.calls.map(([, m]) => m as { operation?: { stage: string } });
+  expect(sent.filter((m) => m.operation?.stage === 'OPEN_TASK')).toHaveLength(1);
+});
+it('Stop khi đang ghép tab thì mọi sự kiện điều hướng đến muộn không mở bước Like', async () => {
+  await start();
+  const tab = { ...tabs.get(10)!, id: 11, url: task().url };
+  tabs.set(11, tab);
+  await manager.command({ type: 'STOP' });
+  await manager.navigationTarget({ sourceTabId: 10, sourceFrameId: 0, tabId: 11, url: task().url });
+  await manager.observeTab(tab, true);
+  expect(state.phase).toBe('STOPPED');
+  expect(state.operation).toBeNull();
 });

@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Điều phối tự động công việc Like/Follow trong các tab thuộc CrossEngage.",
   "minimum_chrome_version": "120",
-  "permissions": ["storage", "alarms"],
+  "permissions": ["storage", "alarms", "webNavigation"],
   "host_permissions": ["https://tuongtaccheo.com/*", "https://*.facebook.com/*"],
   "action": { "default_popup": "index.html", "default_title": "CrossEngage" },
   "background": { "service_worker": "background.js", "type": "module" },

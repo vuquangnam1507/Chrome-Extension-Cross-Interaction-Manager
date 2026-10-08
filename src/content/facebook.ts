@@ -16,7 +16,10 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
       )
     )
       return null;
-    return socialControl(facebookScope(document, task, config), task.kind);
+    return socialControl(
+      facebookScope(document, { ...task, url: operation.documentUrl || task.url }, config),
+      task.kind,
+    );
   }
   const control = await waitFor(inspect, signal);
   if (!control.done) {

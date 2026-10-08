@@ -65,3 +65,51 @@ it('MutationObserver đợi kết quả và Stop hủy ngay', async () => {
   controller.abort();
   await expect(next).rejects.toThrow('hủy');
 });
+it('nhận diện div Like không có text, aria-label hoặc role', () => {
+  document.body.innerHTML = '<main><div data-ad-rendering-role="like_button"></div></main>';
+  expect(socialControl(facebookScope(document, task, config), 'LIKE')).toEqual({
+    button: document.querySelector('[data-ad-rendering-role]'),
+    done: false,
+  });
+});
+it('marker rỗng không có kích thước vẫn nhận diện nút cha có thể bấm', () => {
+  document.body.innerHTML =
+    '<main><div role="button" aria-label="Thích"><div data-ad-rendering-role="like_button"></div></div></main>';
+  const marker = document.querySelector<HTMLElement>('[data-ad-rendering-role]')!;
+  Object.defineProperty(marker, 'getClientRects', { value: () => [] });
+  expect(socialControl(document, 'LIKE')?.button).toBe(document.querySelector('[role="button"]'));
+});
+it('label và marker cùng một nút không bị tính thành hai nút Like', () => {
+  document.body.innerHTML =
+    '<main><button aria-pressed="true" aria-label="Thích"><div data-ad-rendering-role="like_button"></div></button></main>';
+  expect(socialControl(document, 'LIKE')).toEqual({
+    button: document.querySelector('button'),
+    done: true,
+  });
+});
+it('marker bọc ngoài control thì chọn control bên trong, không click wrapper', () => {
+  document.body.innerHTML =
+    '<main><div data-ad-rendering-role="like_button"><button>Thích</button></div></main>';
+  expect(socialControl(document, 'LIKE')?.button).toBe(document.querySelector('button'));
+});
+it('Like marker hidden hoặc disabled không được nhận diện', () => {
+  for (const html of [
+    '<div hidden data-ad-rendering-role="like_button"></div>',
+    '<button disabled><div data-ad-rendering-role="like_button"></div></button>',
+  ]) {
+    document.body.innerHTML = html;
+    expect(socialControl(document, 'LIKE')).toBeNull();
+  }
+});
+it('hai marker Like độc lập vẫn bị chặn để không click nhầm', () => {
+  document.body.innerHTML =
+    '<main><div data-ad-rendering-role="like_button"></div><div data-ad-rendering-role="like_button"></div></main>';
+  expect(() => socialControl(document, 'LIKE')).toThrow('Nhiều');
+});
+it('không lấy control ở ngoài phạm vi bài viết hoặc dùng Like marker cho Follow', () => {
+  document.body.innerHTML =
+    '<button><article><div data-ad-rendering-role="like_button"></div></article></button>';
+  const article = document.querySelector('article')!;
+  expect(socialControl(article, 'LIKE')).toBeNull();
+  expect(socialControl(article, 'FOLLOW')).toBeNull();
+});

@@ -24,3 +24,41 @@ export function facebookUrl(raw: string): string | null {
     return null;
   }
 }
+
+// Compare resource identity, not incidental tracking parameters or mobile hostnames.
+// Never use the owner `id` of story.php as the post ID.
+export function sameFacebookTarget(left: string, right: string): boolean {
+  function identity(raw: string): string | null {
+    const canonical = facebookUrl(raw);
+    if (!canonical) return null;
+    const u = new URL(canonical);
+    const path = u.pathname.replace(/\/+$/, '');
+    const post = /^\/(?:story|permalink)\.php$/.test(path)
+      ? u.searchParams.get('story_fbid')
+      : null;
+    const photo = /^\/photo(?:\.php)?$/.test(path) ? u.searchParams.get('fbid') : null;
+    const profile = path === '/profile.php' ? u.searchParams.get('id') : null;
+    const video = path === '/watch' ? u.searchParams.get('v') : null;
+    const pathId =
+      path.match(/\/(?:posts|videos|reel)\/(\d+|pfbid[A-Za-z0-9]+)$/)?.[1] ||
+      path.match(/^\/(\d+)$/)?.[1];
+    const id = post || photo || profile || video || pathId;
+    if (id && /^(?:\d+|pfbid[A-Za-z0-9]+)$/.test(id)) return `object:${id}`;
+    // Username/profile and other routes keep their query semantics.
+    return `${u.origin}${path}${u.search}`;
+  }
+  const a = identity(left),
+    b = identity(right);
+  return a !== null && a === b;
+}
+
+export function matchesFacebookOperation(
+  actual: string,
+  target: string,
+  documentUrl?: string,
+): boolean {
+  return (
+    sameFacebookTarget(actual, target) ||
+    (!!documentUrl && !!facebookUrl(actual) && facebookUrl(actual) === facebookUrl(documentUrl))
+  );
+}

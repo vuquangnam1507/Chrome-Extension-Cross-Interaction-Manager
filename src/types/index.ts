@@ -33,6 +33,17 @@ export interface AutoOperation {
   taskId: string;
   tabId: number;
   deadline: number;
+  documentUrl?: string;
+  opening?: {
+    existingTabIds: number[];
+    candidates: {
+      tabId: number;
+      sourceKnown: boolean;
+      requestedSeen: boolean;
+      ready: boolean;
+      documentUrl?: string;
+    }[];
+  };
 }
 export interface Settings {
   delaySeconds: number;
