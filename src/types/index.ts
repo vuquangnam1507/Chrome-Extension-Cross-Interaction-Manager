@@ -46,6 +46,8 @@ export interface State {
   originTabId: number | null;
   taskTabs: Record<string, number>;
   dueAt: number | null;
+  emptyRetryAt: number | null;
+  emptyRetryCount: number;
   loadDeadline: number | null;
   error: string | null;
   rewardTaskId: string | null;

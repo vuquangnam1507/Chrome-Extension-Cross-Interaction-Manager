@@ -1,6 +1,9 @@
 import { pageFromUrl } from '../config/pages';
 import type { AdapterConfig, PageId, Task, Scan } from '../types';
 import { interactive, visible, rewardElements } from './detection';
+import { emptyListVisible, reloadListButton } from './empty-list';
+import { readState } from '../services/storage.service';
+import { detect } from './detection';
 import { modules } from '../modules';
 let readyAt = 0;
 let settleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -45,13 +48,8 @@ function emit(full = false) {
     if (!navigator.onLine) status = 'offline';
     else if ([...document.querySelectorAll<HTMLElement>('input[type="password"]')].some(visible))
       status = 'login';
-    else if (
-      !tasks.length &&
-      config.emptySelector &&
-      [...document.querySelectorAll<HTMLElement>(config.emptySelector)].some(visible)
-    )
-      status = 'empty';
-    if (status === 'unknown' && Date.now() < readyAt) {
+    else if (!tasks.length && emptyListVisible(document, config)) status = 'empty';
+    if ((status === 'unknown' || status === 'empty') && Date.now() < readyAt) {
       clearTimeout(settleTimer);
       settleTimer = setTimeout(() => emit(true), readyAt - Date.now());
       return;
@@ -113,6 +111,42 @@ chrome.runtime.onMessage.addListener((m, _sender, reply) => {
       ],
     });
     reply({ ok: true });
+  } else if (m.type === 'RELOAD_LIST') {
+    void (async () => {
+      try {
+        const state = await readState();
+        if (
+          !context ||
+          context.token !== m.token ||
+          pageFromUrl(location.href) !== m.page ||
+          !state.running ||
+          state.scanToken !== m.token ||
+          state.emptyRetryCount !== m.attempt ||
+          state.phase !== 'SCANNING_TASKS'
+        )
+          throw Error('Yêu cầu tải lại đã hết hiệu lực.');
+        if (!navigator.onLine) throw Error('Mất kết nối mạng.');
+        if (detect(document, context.page, context.config).length) {
+          emit(true);
+          reply({ ok: true });
+          return;
+        }
+        if (!emptyListVisible(document, context.config)) {
+          emit(true);
+          reply({ ok: true });
+          return;
+        }
+        const button = reloadListButton(document);
+        readyAt = Date.now() + 4000;
+        button.click(); // Only the explicitly identified list reload control, never a task/reward.
+        clearTimeout(settleTimer);
+        settleTimer = setTimeout(() => emit(true), 4000);
+        reply({ ok: true });
+      } catch (e) {
+        reply({ ok: false, error: String(e) });
+      }
+    })();
+    return true;
   } else if (m.type === 'HIGHLIGHT') {
     try {
       if (pageFromUrl(location.href) !== m.page) throw Error('Tab gốc đã đổi trang.');

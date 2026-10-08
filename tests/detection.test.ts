@@ -97,3 +97,20 @@ it('title không cho phép URL giả, javascript hoặc nút nhận thưởng', 
   button.textContent = 'Nhận xu';
   expect(detect(document, 'likepostvipcheo', c)).toEqual([]);
 });
+
+import { emptyListVisible, reloadListButton } from '../src/content/empty-list';
+it('nhận diện thông báo hết nhiệm vụ đang hiển thị', () => {
+  document.body.innerHTML = '<div hidden>Chưa có thêm nhiệm vụ</div>';
+  expect(emptyListVisible(document, c)).toBe(false);
+  document.body.innerHTML = '<div>Chưa có thêm nhiệm vụ, hãy đợi một chút!</div>';
+  expect(emptyListVisible(document, c)).toBe(true);
+});
+it('chỉ chọn nút tải lại rõ ràng, không chọn nút nhiệm vụ hoặc nhận xu', () => {
+  document.body.innerHTML =
+    '<button>Nhận tất cả xu</button><button>Like</button><button id="reload">Tải lại danh sách</button>';
+  expect(reloadListButton(document).id).toBe('reload');
+  document.querySelector('#reload')!.remove();
+  expect(() => reloadListButton(document)).toThrow();
+  document.body.innerHTML = '<button>Tải lại</button><button>Tải lại danh sách</button>';
+  expect(() => reloadListButton(document)).toThrow('Có nhiều');
+});

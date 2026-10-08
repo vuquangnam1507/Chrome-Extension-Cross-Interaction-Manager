@@ -25,6 +25,8 @@ npm run build
 
 `npm run dev` chỉ phục vụ phát triển popup. Để thử workflow thực phải build và Load unpacked, vì trang Vite thông thường không có Chrome Extension API.
 
+Mỗi lần build, phiên bản hiển thị trong Chrome được đặt theo giờ Việt Nam, dạng `22:17 · 08/10/2026`. Popup có dòng **Cập nhật: HH:mm · DD/MM/YYYY** ngay dưới tên CrossEngage. Đây là thời gian build của bản đang cài, không phải đồng hồ chạy. Manifest trong `dist` dùng `version_name` cho giờ hiển thị và `version` dạng số theo ngày/giờ/giây để Chrome nhận diện bản build, theo [quy định phiên bản Chrome](https://developer.chrome.com/docs/extensions/reference/manifest/version). Reload extension để thấy bản mới.
+
 ## Sử dụng
 
 - Trong **Chọn chức năng chạy** ngay đầu popup, tích 1, 2, 3 hoặc cả 4 mục. Có nút **Chọn tất cả / Bỏ chọn tất cả** và hiển thị thứ tự chạy. Bấm **Start (N/4)** để lưu lựa chọn và chạy từ mục đầu tiên được chọn theo thứ tự đã lưu; các mục không chọn sẽ bị bỏ qua. Bấm **Stop** trước khi đổi lựa chọn.
@@ -56,9 +58,11 @@ Trong **Cấu hình → Adapter DOM nâng cao**, mỗi trang có các trường:
 
 Bốn trang có adapter độc lập. Sau khi kiểm tra HTML bằng DevTools, nhập selector chính xác và lưu. Nếu trang chỉ chứa hàm JavaScript/ID nội bộ không kèm URL, cần bổ sung parser có kiểm thử vào module tương ứng dựa trên HTML thực tế; hiện extension sẽ không coi nút đó là công việc.
 
-Thưởng nhóm tìm nút/thẻ liên kết có nội dung hiển thị chính xác **Nhận tất cả xu**, có chuẩn hóa khoảng trắng và hoa/thường. Nếu không tìm được hoặc có nhiều nút phù hợp, extension báo lỗi thay vì chọn bừa. Làm nổi bật chỉ scroll và outline; không gọi `.click()`.
+Thưởng nhóm tìm nút/thẻ liên kết có nội dung hiển thị chính xác **Nhận tất cả xu**, có chuẩn hóa khoảng trắng và hoa/thường. Nếu không tìm được hoặc có nhiều nút phù hợp, extension báo lỗi thay vì chọn bừa. Làm nổi bật thưởng chỉ scroll và outline; không click công việc hoặc nút nhận thưởng. Chỉ nút tải lại danh sách được tự nhấn theo yêu cầu người dùng.
 
-Không nhận diện được selector **khác** hết việc: extension đợi DOM ổn định ban đầu tối đa 4 giây rồi báo lỗi nếu chưa nhận diện được. Với trang tải lâu hơn, đợi trang xong rồi bấm **Quét lại**. Chỉ tự rời trang rỗng khi `emptySelector` đã cấu hình khớp. Kiểm tra hết một vòng các trang đang bật mà đều rỗng thì tự Stop, tránh vòng lặp không giới hạn.
+Không nhận diện được selector **khác** hết việc: extension đợi DOM ổn định ban đầu tối đa 4 giây rồi báo lỗi nếu chưa nhận diện được. Với trang tải lâu hơn, đợi trang xong rồi bấm **Quét lại**. Nhận diện hết việc khi trang hiển thị “Chưa có thêm nhiệm vụ” hoặc `emptySelector` đã cấu hình khớp.
+
+Khi chưa có công việc trong lượt hiện tại, chờ 3 giây (5 giây nếu chỉ chọn một trang), bấm nút có nhãn chính xác “Tải lại danh sách” hoặc “Tải lại”, rồi chờ 4 giây để kiểm tra kết quả tải. Thử tối đa 3 lần mỗi trang; có nhiệm vụ mới thì hủy lượt chờ. Hết 3 lần sẽ chuyển sang trang tiếp theo đã chọn; kiểm tra hết một vòng đều rỗng thì Stop. Nếu chỉ chọn một trang, Stop sau 3 lần vẫn rỗng. Deadline và bộ đếm được lưu vào storage để khôi phục khi worker tạm dừng; Stop hủy cả chờ tải lại và chờ chuyển trang. Nếu không có nút tải lại phù hợp hoặc có nhiều nút trùng nhãn, báo lỗi để xác minh HTML, không đoán selector. Danh sách đã phát hiện còn chờ người dùng xử lý hoặc xác nhận thưởng nhóm không tự bị bỏ qua.
 
 ## Kiến trúc
 

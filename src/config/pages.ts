@@ -46,6 +46,8 @@ export function initialState(): State {
     originTabId: null,
     taskTabs: {},
     dueAt: null,
+    emptyRetryAt: null,
+    emptyRetryCount: 0,
     loadDeadline: null,
     error: null,
     rewardTaskId: null,

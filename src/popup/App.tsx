@@ -34,6 +34,7 @@ export default function App() {
     subcheo: 'Follow thường',
     subcheofbvip: 'Follow VIP · thưởng nhóm',
   };
+  const countdown = s.emptyRetryAt ?? s.dueAt;
   const completed = s.tasks.filter((t) => s.completedTasks.includes(t.id)).length;
   return (
     <main>
@@ -44,6 +45,9 @@ export default function App() {
         <div>
           <h1>CrossEngage</h1>
           <small>Trợ lý điều phối công việc</small>
+          <div className="build-time" title="Thời gian build của bản đang cài, theo giờ Việt Nam">
+            Cập nhật: {chrome.runtime.getManifest().version_name || 'Bản phát triển'}
+          </div>
         </div>
         <span className={`status ${s.running ? 'on' : ''}`}>
           {s.running ? 'Running' : 'Stopped'}
@@ -166,8 +170,10 @@ export default function App() {
                 Đã xác nhận
               </div>
               <div>
-                <strong>{s.dueAt ? Math.max(0, Math.ceil((s.dueAt - now) / 1000)) : '—'}</strong>
-                Giây chờ
+                <strong>
+                  {countdown ? Math.max(0, Math.ceil((countdown - now) / 1000)) : '—'}
+                </strong>
+                {s.emptyRetryAt ? `Tải lại ${s.emptyRetryCount + 1}/3` : 'Giây chờ'}
               </div>
             </div>
             <progress max={s.tasks.length || 1} value={completed} />

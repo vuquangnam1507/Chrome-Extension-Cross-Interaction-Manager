@@ -18,6 +18,7 @@ export class WorkflowManager {
       } catch (e) {
         s.error = e instanceof Error ? e.message : String(e);
         transition(s, 'ERROR');
+        s.emptyRetryAt = null;
         s.dueAt = null;
         s.loadDeadline = null;
         this.log(s, s.error);
@@ -38,7 +39,7 @@ export class WorkflowManager {
   async schedule(s: State) {
     clearTimeout(this.timer);
     await chrome.alarms.clear('crossengage');
-    const due = s.dueAt ?? s.loadDeadline;
+    const due = s.dueAt ?? s.emptyRetryAt ?? s.loadDeadline;
     if (!s.running || this.stopped || due === null) return;
     this.timer = setTimeout(
       () => {
@@ -51,7 +52,21 @@ export class WorkflowManager {
   async wake() {
     return this.dispatch(async (s) => {
       if (!s.running || this.stopped) return;
-      if (s.dueAt !== null && Date.now() >= s.dueAt) {
+      if (s.emptyRetryAt !== null && Date.now() >= s.emptyRetryAt) {
+        s.emptyRetryAt = null;
+        s.emptyRetryCount++;
+        s.loadDeadline = Date.now() + 20000;
+        await saveState(s);
+        if (this.stopped) return;
+        const result = await chrome.tabs.sendMessage(s.originTabId!, {
+          type: 'RELOAD_LIST',
+          page: this.page(s),
+          token: s.scanToken,
+          attempt: s.emptyRetryCount,
+        });
+        if (!result?.ok) throw Error(result?.error || 'Không thể tải lại danh sách.');
+        this.log(s, `Đã yêu cầu tải lại danh sách (${s.emptyRetryCount}/3).`);
+      } else if (s.dueAt !== null && Date.now() >= s.dueAt) {
         s.currentPageIndex = nextIndex(s);
         await this.navigate(s);
       } else if (s.loadDeadline !== null && Date.now() >= s.loadDeadline)
@@ -64,6 +79,7 @@ export class WorkflowManager {
     return this.dispatch(async (s) => {
       if (!s.running) {
         s.phase = 'STOPPED';
+        s.emptyRetryAt = null;
         s.dueAt = null;
         s.loadDeadline = null;
         return;
@@ -83,6 +99,8 @@ export class WorkflowManager {
   async navigate(s: State) {
     if (this.stopped || !s.running) return;
     transition(s, 'LOADING_PAGE');
+    s.emptyRetryAt = null;
+    s.emptyRetryCount = 0;
     s.tasks = [];
     s.currentTaskId = null;
     s.rewardTaskId = null;
@@ -107,6 +125,7 @@ export class WorkflowManager {
   }
   async scan(s: State) {
     if (!s.running || this.stopped || s.originTabId === null) return;
+    s.emptyRetryAt = null;
     transition(s, 'SCANNING_TASKS');
     s.error = null;
     s.scanToken = crypto.randomUUID();
@@ -148,6 +167,7 @@ export class WorkflowManager {
         throw Error('Tuongtaccheo có dấu hiệu chưa đăng nhập. Đăng nhập ở tab gốc rồi Quét lại.');
       if (report.status === 'offline') throw Error('Mất kết nối mạng. Kết nối lại rồi Quét lại.');
       if (report.status === 'unknown') {
+        s.emptyRetryAt = null;
         if (s.tasks.length === 0)
           throw Error(report.detail || 'Chưa xác minh được danh sách; cần cấu hình adapter.');
         if (s.phase === 'SCANNING_TASKS')
@@ -166,6 +186,8 @@ export class WorkflowManager {
       s.tasks = dedupe([...s.tasks, ...valid]);
       const p = pending(s);
       if (p.length) {
+        s.emptyRetryAt = null;
+        s.emptyRetryCount = 0;
         s.emptyVisits = 0;
         s.currentTaskId = p.some((t) => t.id === s.currentTaskId) ? s.currentTaskId : p[0].id;
         if (s.phase === 'SCANNING_TASKS' || s.phase === 'TASK_COMPLETED')
@@ -175,6 +197,18 @@ export class WorkflowManager {
           transition(s, 'TASK_AVAILABLE');
         }
       } else if (s.tasks.length === 0 && report.status === 'empty') {
+        if (s.emptyRetryCount < 3) {
+          if (s.emptyRetryAt === null) {
+            const seconds =
+              s.settings.order.filter((p) => s.settings.enabled[p]).length === 1 ? 5 : 3;
+            s.emptyRetryAt = Date.now() + seconds * 1000;
+            this.log(
+              s,
+              `Chưa có thêm nhiệm vụ. Chờ ${seconds} giây để tải lại (${s.emptyRetryCount + 1}/3).`,
+            );
+          }
+          return;
+        }
         s.emptyVisits++;
         if (s.emptyVisits >= s.settings.order.filter((p) => s.settings.enabled[p]).length) {
           await this.stop(s);
@@ -185,6 +219,7 @@ export class WorkflowManager {
     });
   }
   async finish(s: State) {
+    s.emptyRetryAt = null;
     transition(s, 'PAGE_COMPLETED');
     transition(s, 'WAITING_NEXT_PAGE');
     s.loadDeadline = null;
@@ -193,6 +228,7 @@ export class WorkflowManager {
     this.log(s, 'Chờ chuyển trang.');
   }
   async stop(s: State) {
+    s.emptyRetryAt = null;
     s.running = false;
     transition(s, 'STOPPED');
     s.dueAt = null;

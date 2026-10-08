@@ -224,6 +224,14 @@ it('tất cả trang rỗng thì dừng sau một vòng', async () => {
       stored.originTabId!,
       pageUrl(page),
     );
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await vi.advanceTimersByTimeAsync(3000);
+      await manager.accept(
+        { type: 'SCAN', page, token: stored.scanToken!, tasks: [], status: 'empty', detail: '' },
+        stored.originTabId!,
+        pageUrl(page),
+      );
+    }
     if (n < 3) await vi.advanceTimersByTimeAsync(5000);
   }
   expect(stored.running).toBe(false);
@@ -325,4 +333,94 @@ it('không mở tab nếu Start với tất cả mục bị tắt', async () => 
   });
   expect(stored.running).toBe(false);
   expect(chrome.tabs.create).not.toHaveBeenCalled();
+});
+async function reportEmpty() {
+  const page = stored.settings.order[stored.currentPageIndex];
+  await manager.accept(
+    { type: 'SCAN', page, token: stored.scanToken!, tasks: [], status: 'empty', detail: '' },
+    stored.originTabId!,
+    pageUrl(page),
+  );
+}
+it('một trang chờ 5 giây rồi tải lại danh sách tại chỗ', async () => {
+  await manager.command({
+    type: 'START',
+    enabled: { likepostvipcheo: true, likepostvipre: false, subcheo: false, subcheofbvip: false },
+  });
+  await manager.pageReady(stored.originTabId!);
+  await reportEmpty();
+  await vi.advanceTimersByTimeAsync(4999);
+  expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(chrome.tabs.sendMessage).toHaveBeenLastCalledWith(
+    stored.originTabId,
+    expect.objectContaining({ type: 'RELOAD_LIST', attempt: 1 }),
+  );
+  expect(chrome.tabs.update).not.toHaveBeenCalled();
+  for (let n = 0; n < 2; n++) {
+    await reportEmpty();
+    await vi.advanceTimersByTimeAsync(5000);
+  }
+  await reportEmpty();
+  expect(stored.running).toBe(false);
+  expect(stored.emptyRetryCount).toBe(3);
+});
+it('Stop hủy lần tải lại danh sách đang chờ', async () => {
+  await manager.command({ type: 'START' });
+  await manager.pageReady(stored.originTabId!);
+  await reportEmpty();
+  await manager.command({ type: 'STOP' });
+  await vi.advanceTimersByTimeAsync(30000);
+  expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1);
+  expect(stored.emptyRetryAt).toBeNull();
+});
+it('có công việc mới thì hủy retry; thông báo empty trùng không lùi deadline', async () => {
+  await manager.command({ type: 'START' });
+  await manager.pageReady(stored.originTabId!);
+  await reportEmpty();
+  const deadline = stored.emptyRetryAt;
+  await vi.advanceTimersByTimeAsync(1000);
+  await reportEmpty();
+  expect(stored.emptyRetryAt).toBe(deadline);
+  await manager.accept(
+    {
+      type: 'SCAN',
+      page: 'likepostvipcheo',
+      token: stored.scanToken!,
+      tasks: [task()],
+      status: 'ok',
+      detail: '',
+    },
+    stored.originTabId!,
+    pageUrl('likepostvipcheo'),
+  );
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(stored.phase).toBe('TASK_AVAILABLE');
+  expect(stored.emptyRetryAt).toBeNull();
+  expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(1);
+});
+it('khôi phục deadline tải lại sau khi worker bị tạm dừng', async () => {
+  await manager.command({ type: 'START' });
+  await manager.pageReady(stored.originTabId!);
+  await reportEmpty();
+  vi.clearAllTimers();
+  manager = new WorkflowManager();
+  await manager.restore();
+  await vi.advanceTimersByTimeAsync(3000);
+  await manager.wake();
+  expect(stored.emptyRetryCount).toBe(1);
+  expect(chrome.tabs.sendMessage).toHaveBeenCalledTimes(2);
+});
+it('không tìm được nút tải lại thì báo lỗi, không tự chuyển trang', async () => {
+  await manager.command({ type: 'START' });
+  await manager.pageReady(stored.originTabId!);
+  await reportEmpty();
+  vi.mocked(chrome.tabs.sendMessage).mockResolvedValueOnce({
+    ok: false,
+    error: 'Không tìm thấy nút Tải lại danh sách',
+  });
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(stored.phase).toBe('ERROR');
+  expect(stored.emptyRetryAt).toBeNull();
+  expect(chrome.tabs.update).not.toHaveBeenCalled();
 });
