@@ -27,6 +27,7 @@ npm run build
 
 ## Sử dụng
 
+- Trong **Chọn chức năng chạy** ngay đầu popup, tích 1, 2, 3 hoặc cả 4 mục. Có nút **Chọn tất cả / Bỏ chọn tất cả** và hiển thị thứ tự chạy. Bấm **Start (N/4)** để lưu lựa chọn và chạy từ mục đầu tiên được chọn theo thứ tự đã lưu; các mục không chọn sẽ bị bỏ qua. Bấm **Stop** trước khi đổi lựa chọn.
 - **Start** tạo tab Tuongtaccheo do extension theo dõi; lần tiếp theo có thể tái sử dụng tab gốc còn hợp lệ.
 - Chọn **Mở Facebook** cho công việc hiện tại. Extension giữ mapping taskId/tabId và ưu tiên quay lại tab đã mở có đúng URL.
 - Tự Like/Follow; mở lại popup rồi bấm **Tôi đã Like/Follow**. Tab Facebook được giữ nguyên.

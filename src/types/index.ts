@@ -57,7 +57,6 @@ export type Command =
   | {
       type:
         | 'GET'
-        | 'START'
         | 'STOP'
         | 'OPEN'
         | 'CONFIRM'
@@ -70,6 +69,7 @@ export type Command =
         | 'CLEAR'
         | 'RESCAN';
     }
+  | { type: 'START'; enabled?: Settings['enabled'] }
   | { type: 'SETTINGS'; settings: Settings };
 export interface Scan {
   type: 'SCAN';

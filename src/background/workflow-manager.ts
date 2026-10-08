@@ -218,7 +218,14 @@ export class WorkflowManager {
       if (c.type === 'START') {
         if (s.running || version !== this.stopVersion) return;
         this.stopped = false;
-        validateSettings(s.settings);
+        const settings = c.enabled ? { ...s.settings, enabled: c.enabled } : s.settings;
+        validateSettings(settings);
+        s.settings = settings;
+        if (c.enabled) s.currentPageIndex = settings.order.findIndex((p) => settings.enabled[p]);
+        this.log(
+          s,
+          `Chạy các mục đã chọn: ${settings.order.filter((p) => settings.enabled[p]).join(' → ')}`,
+        );
         s.running = true;
         s.error = null;
         s.emptyVisits = 0;

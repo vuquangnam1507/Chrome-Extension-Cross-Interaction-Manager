@@ -26,6 +26,14 @@ export default function App() {
   const batch = page === 'subcheofbvip';
   const action = (type: Command['type']) => void execute({ type } as Command);
   const disabled = busy || !s.running;
+  const enabled = !s.running && draft ? draft.enabled : s.settings.enabled;
+  const selectedPages = s.settings.order.filter((p) => enabled[p]);
+  const titles = {
+    likepostvipcheo: 'Like VIP chéo',
+    likepostvipre: 'Like VIP rẻ',
+    subcheo: 'Follow thường',
+    subcheofbvip: 'Follow VIP · thưởng nhóm',
+  };
   const completed = s.tasks.filter((t) => s.completedTasks.includes(t.id)).length;
   return (
     <main>
@@ -41,9 +49,85 @@ export default function App() {
           {s.running ? 'Running' : 'Stopped'}
         </span>
       </header>
+      <section className="run-selection" aria-labelledby="run-selection-title">
+        <div className="selection-heading">
+          <h2 id="run-selection-title">Chọn chức năng chạy</h2>
+          <span>{selectedPages.length} / 4 đã chọn</span>
+        </div>
+        <fieldset disabled={busy || s.running || !draft}>
+          <div className="selection-grid">
+            {s.settings.order.map((p) => (
+              <label key={p} className={`selection-card ${enabled[p] ? 'checked' : ''}`}>
+                <input
+                  type="checkbox"
+                  checked={enabled[p]}
+                  onChange={(e) => {
+                    if (draft)
+                      setDraft({ ...draft, enabled: { ...draft.enabled, [p]: e.target.checked } });
+                  }}
+                />
+                <span>
+                  <strong>{titles[p]}</strong>
+                  <small>{p}</small>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div className="selection-shortcuts">
+            <button
+              onClick={() => {
+                if (draft)
+                  setDraft({
+                    ...draft,
+                    enabled: {
+                      likepostvipcheo: true,
+                      likepostvipre: true,
+                      subcheo: true,
+                      subcheofbvip: true,
+                    },
+                  });
+              }}
+            >
+              Chọn tất cả
+            </button>
+            <button
+              onClick={() => {
+                if (draft)
+                  setDraft({
+                    ...draft,
+                    enabled: {
+                      likepostvipcheo: false,
+                      likepostvipre: false,
+                      subcheo: false,
+                      subcheofbvip: false,
+                    },
+                  });
+              }}
+            >
+              Bỏ chọn tất cả
+            </button>
+          </div>
+        </fieldset>
+        <p className="note" aria-live="polite">
+          {s.running
+            ? 'Đang chạy các mục đã chọn. Bấm Stop để đổi lựa chọn.'
+            : selectedPages.length
+              ? 'Chọn 1–4 chức năng để kiểm tra. Lựa chọn được lưu khi bấm Start.'
+              : 'Chọn ít nhất một chức năng để bắt đầu.'}
+        </p>
+        {selectedPages.length > 0 && (
+          <p className="selection-order">
+            Thứ tự: {selectedPages.map((p) => titles[p]).join(' → ')}
+          </p>
+        )}
+      </section>
       <div className="controls">
-        <button className="primary" disabled={busy || s.running} onClick={() => action('START')}>
-          ▶ Start
+        <button
+          className="primary"
+          disabled={busy || s.running || !draft || selectedPages.length === 0}
+          onClick={() => void execute({ type: 'START', enabled })}
+        >
+          ▶ Start ({selectedPages.length}/4)
         </button>
         <button disabled={!s.running} onClick={() => action('STOP')}>
           ■ Stop

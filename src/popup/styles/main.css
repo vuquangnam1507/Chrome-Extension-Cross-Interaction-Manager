@@ -227,3 +227,66 @@ footer {
   letter-spacing: 1px;
   margin-top: 18px;
 }
+.selection-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.selection-heading h2 {
+  margin: 0;
+}
+.selection-heading > span {
+  font-size: 11px;
+  color: #245bda;
+  white-space: nowrap;
+}
+.selection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.selection-card {
+  display: flex;
+  align-items: flex-start;
+  padding: 10px 7px;
+  border: 1px solid #dce2ec;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.selection-card.checked {
+  background: #eff5ff;
+  border-color: #86a9f4;
+}
+.selection-card strong {
+  display: block;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.selection-card small {
+  display: block;
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.selection-card input {
+  margin-top: 3px;
+}
+.selection-shortcuts {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.selection-shortcuts button {
+  padding: 6px 8px;
+  font-size: 11px;
+}
+.run-selection fieldset:disabled .selection-card {
+  cursor: default;
+}
+.selection-order {
+  font-size: 11px;
+  line-height: 1.6;
+  margin-bottom: 0;
+  color: #245bda;
+}

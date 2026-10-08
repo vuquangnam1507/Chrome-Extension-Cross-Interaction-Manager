@@ -284,3 +284,45 @@ it('DOM tạm biến mất không xóa snapshot công việc đang chờ', async
   expect(stored.phase).toBe('TASK_AVAILABLE');
   expect(stored.dueAt).toBeNull();
 });
+it('Start chỉ một mục: mở đúng trang và không chuyển sang mục tắt', async () => {
+  const enabled = {
+    likepostvipcheo: false,
+    likepostvipre: false,
+    subcheo: true,
+    subcheofbvip: false,
+  };
+  await manager.command({ type: 'START', enabled });
+  expect(stored.settings.enabled).toEqual(enabled);
+  expect(chrome.tabs.create).toHaveBeenCalledWith(
+    expect.objectContaining({ url: pageUrl('subcheo') }),
+  );
+  await manager.pageReady(stored.originTabId!);
+  await manager.command({ type: 'SKIP_PAGE' });
+  await vi.advanceTimersByTimeAsync(5000);
+  expect(stored.currentPageIndex).toBe(2);
+  expect(chrome.tabs.update).toHaveBeenLastCalledWith(stored.originTabId, {
+    url: pageUrl('subcheo'),
+  });
+});
+it('Start hai mục theo thứ tự đã lưu và chỉ luân phiên hai mục đó', async () => {
+  stored.settings.order = ['subcheofbvip', 'subcheo', 'likepostvipre', 'likepostvipcheo'];
+  await manager.command({
+    type: 'START',
+    enabled: { likepostvipcheo: false, likepostvipre: true, subcheo: false, subcheofbvip: true },
+  });
+  expect(stored.currentPageIndex).toBe(0);
+  for (const expected of [2, 0]) {
+    await manager.pageReady(stored.originTabId!);
+    await manager.command({ type: 'SKIP_PAGE' });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(stored.currentPageIndex).toBe(expected);
+  }
+});
+it('không mở tab nếu Start với tất cả mục bị tắt', async () => {
+  await manager.command({
+    type: 'START',
+    enabled: { likepostvipcheo: false, likepostvipre: false, subcheo: false, subcheofbvip: false },
+  });
+  expect(stored.running).toBe(false);
+  expect(chrome.tabs.create).not.toHaveBeenCalled();
+});
