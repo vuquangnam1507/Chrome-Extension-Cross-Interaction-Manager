@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useWorkflow } from './store';
-import type { Settings, Command } from '../types';
-import { batchComplete, pending } from '../services/task.service';
+import type { Settings, Command, Phase } from '../types';
+
 export default function App() {
   const { state: s, busy, error, execute } = useWorkflow();
   const [tab, setTab] = useState('work');
@@ -25,7 +25,25 @@ export default function App() {
   const task = s.tasks.find((t) => t.id === s.currentTaskId);
   const batch = page === 'subcheofbvip';
   const action = (type: Command['type']) => void execute({ type } as Command);
-  const disabled = busy || !s.running;
+  const phaseLabels: Record<Phase, string> = {
+    STOPPED: 'Đã dừng',
+    IDLE: 'Chuẩn bị',
+    LOADING_PAGE: 'Đang tải trang',
+    SCANNING_TASKS: 'Đang tìm nhiệm vụ',
+    TASK_AVAILABLE: 'Đã phát hiện nhiệm vụ',
+    WAITING_USER_ACTION: 'Đang mở công việc tự động',
+    WAITING_CONFIRMATION: 'Đang thực hiện trên Facebook',
+    TASK_COMPLETED: 'Đang xử lý nhận thưởng',
+    PAGE_COMPLETED: 'Hoàn tất danh sách',
+    WAITING_NEXT_PAGE: 'Đang chờ chuyển trang',
+    ERROR: 'Đã tạm dừng do lỗi',
+  };
+  const operationLabels = {
+    OPEN_TASK: 'Bấm nút gốc → chờ Facebook mở',
+    FACEBOOK_ACTION: 'Thực hiện tương tác → kiểm tra kết quả',
+    CLAIM_REWARD: 'Nhận xu → kiểm tra thông báo',
+    CLAIM_BATCH: 'Nhận tất cả xu → kiểm tra thông báo',
+  };
   const enabled = !s.running && draft ? draft.enabled : s.settings.enabled;
   const selectedPages = s.settings.order.filter((p) => enabled[p]);
   const titles = {
@@ -35,7 +53,7 @@ export default function App() {
     subcheofbvip: 'Follow VIP · thưởng nhóm',
   };
   const countdown = s.emptyRetryAt ?? s.dueAt;
-  const completed = s.tasks.filter((t) => s.completedTasks.includes(t.id)).length;
+  const completed = s.tasks.filter((t) => s.verifiedTasks.includes(t.id)).length;
   return (
     <main>
       <header>
@@ -50,7 +68,7 @@ export default function App() {
           </div>
         </div>
         <span className={`status ${s.running ? 'on' : ''}`}>
-          {s.running ? 'Running' : 'Stopped'}
+          {s.phase === 'ERROR' ? 'Tạm dừng' : s.running ? 'Running' : 'Stopped'}
         </span>
       </header>
       <section className="run-selection" aria-labelledby="run-selection-title">
@@ -129,7 +147,16 @@ export default function App() {
         <button
           className="primary"
           disabled={busy || s.running || !draft || selectedPages.length === 0}
-          onClick={() => void execute({ type: 'START', enabled })}
+          onClick={() => {
+            void chrome.windows
+              .getCurrent()
+              .then((window) => {
+                if (window.id === undefined)
+                  throw Error('Không xác định được cửa sổ Chrome hiện tại.');
+                return execute({ type: 'START', enabled, windowId: window.id });
+              })
+              .catch((e) => setLocalError(String(e)));
+          }}
         >
           ▶ Start ({selectedPages.length}/4)
         </button>
@@ -158,7 +185,7 @@ export default function App() {
           <section>
             <div className="eyebrow">TRANG ĐANG XỬ LÝ</div>
             <h2>{page}</h2>
-            <small>{s.phase}</small>
+            <small>{phaseLabels[s.phase]}</small>
             <div className="stats">
               <div>
                 <strong>{s.tasks.length}</strong>Phát hiện
@@ -167,7 +194,7 @@ export default function App() {
                 <strong>
                   {completed} / {s.tasks.length}
                 </strong>
-                Đã xác nhận
+                Đã có kết quả
               </div>
               <div>
                 <strong>
@@ -180,91 +207,15 @@ export default function App() {
           </section>
           <section>
             <div className="eyebrow">
-              {batch ? 'FOLLOW · NHẬN THƯỞNG THEO NHÓM' : task?.kind || 'HÀNG ĐỢI'}
+              TỰ ĐỘNG · {batch ? 'THƯỞNG THEO NHÓM' : 'THƯỞNG TỪNG CÔNG VIỆC'}
             </div>
-            {task && pending(s).some((t) => t.id === task.id) ? (
-              <>
-                <h2>{task.label}</h2>
-                <p className="url">{task.url}</p>
-                <button
-                  className="primary full"
-                  disabled={
-                    disabled || !['TASK_AVAILABLE', 'WAITING_CONFIRMATION'].includes(s.phase)
-                  }
-                  onClick={() => action('OPEN')}
-                >
-                  Mở Facebook / Quay lại công việc ↗
-                </button>
-                <div className="controls">
-                  <button
-                    disabled={disabled || s.phase !== 'WAITING_CONFIRMATION'}
-                    onClick={() => action('CONFIRM')}
-                  >
-                    Tôi đã {task.kind === 'LIKE' ? 'Like' : 'Follow'}
-                  </button>
-                  <button
-                    disabled={
-                      disabled || !['TASK_AVAILABLE', 'WAITING_CONFIRMATION'].includes(s.phase)
-                    }
-                    onClick={() => action('SKIP_TASK')}
-                  >
-                    Bỏ qua
-                  </button>
-                </div>
-              </>
-            ) : (
-              <p>{s.tasks.length ? 'Danh sách đã xử lý.' : 'Chưa có công việc được nhận diện.'}</p>
-            )}
-            <p className="note">
-              Bạn tự thao tác trên Facebook. Xác nhận chỉ ghi nhận tiến độ, không xác minh
-              Like/Follow thành công.
-            </p>
-          </section>
-          <section>
-            <div className="controls">
-              <button disabled={busy || s.originTabId === null} onClick={() => action('BACK')}>
-                Về tab gốc
-              </button>
-              <button
-                disabled={disabled || (batch && !batchComplete(s))}
-                onClick={() => action('HIGHLIGHT')}
-              >
-                {batch ? 'Tìm “Nhận tất cả xu”' : 'Tìm thưởng công việc vừa xong'}
-              </button>
-            </div>
-            {batch && (
-              <button
-                className="full"
-                disabled={disabled || !batchComplete(s) || s.phase === 'WAITING_NEXT_PAGE'}
-                onClick={() => action('REWARD_CONFIRMED')}
-              >
-                Tôi đã nhận thưởng nhóm → chuyển trang
-              </button>
-            )}
-            <div className="controls">
-              <button
-                disabled={disabled || s.phase === 'WAITING_NEXT_PAGE'}
-                onClick={() => action('RESCAN')}
-              >
-                Quét lại
-              </button>
-              <button
-                disabled={disabled || s.phase === 'WAITING_NEXT_PAGE' || s.phase === 'LOADING_PAGE'}
-                onClick={() => action('SKIP_PAGE')}
-              >
-                Bỏ qua trang
-              </button>
-            </div>
-            {!batch && (
-              <button
-                className="full"
-                disabled={disabled || pending(s).length > 0 || s.phase !== 'PAGE_COMPLETED'}
-                onClick={() => action('FINISH_PAGE')}
-              >
-                Đã xử lý danh sách → chuyển trang
-              </button>
-            )}
-            <small>Nhận thưởng luôn do bạn tự nhấn trên trang gốc.</small>
+            <h2>{s.operation ? operationLabels[s.operation.stage] : phaseLabels[s.phase]}</h2>
+            {task && <p className="url">{task.url}</p>}
+            <p className="note">Start để chạy toàn bộ quy trình. Stop để hủy các bước đang chờ.</p>
+            <small>
+              Đã nhận thưởng: {s.tasks.filter((t) => s.rewardedTasks.includes(t.id)).length} /{' '}
+              {s.tasks.length} · Chỉ thao tác trên tab thuộc workflow trong cửa sổ Chrome này.
+            </small>
           </section>
         </>
       )}
@@ -340,6 +291,8 @@ export default function App() {
                       'containerSelector',
                       'individualRewardSelector',
                       'emptySelector',
+                      'facebookScopeSelector',
+                      'rewardSuccessSelector',
                     ] as const)
                       if (c[key]) document.querySelector(c[key]);
                   }
@@ -359,7 +312,7 @@ export default function App() {
         <section>
           <h2>Nhật ký hoạt động</h2>
           <p>
-            {s.completedTasks.length} xác nhận · {s.skippedTasks.length} bỏ qua (lịch sử)
+            {s.verifiedTasks.length} đã có kết quả · {s.skippedTasks.length} bỏ qua (lịch sử)
           </p>
           <button
             disabled={busy || s.running}
@@ -380,7 +333,7 @@ export default function App() {
           </ol>
         </section>
       )}
-      <footer>THỦ CÔNG · MINH BẠCH · KHÔNG TỰ NHẬN XU</footer>
+      <footer>TỰ ĐỘNG · CHỈ TAB THUỘC WORKFLOW</footer>
     </main>
   );
 }

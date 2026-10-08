@@ -25,6 +25,8 @@ export function defaultSettings(): Settings {
           urlAttribute: '',
           individualRewardSelector: '',
           emptySelector: '',
+          facebookScopeSelector: '',
+          rewardSuccessSelector: '',
         },
       ]),
     ) as Settings['adapters'],
@@ -33,6 +35,11 @@ export function defaultSettings(): Settings {
 export function initialState(): State {
   return {
     version: 1,
+    automationRevision: 1,
+    workflowWindowId: null,
+    operation: null,
+    verifiedTasks: [],
+    rewardedTasks: [],
     running: false,
     phase: 'STOPPED',
     currentPageIndex: 0,

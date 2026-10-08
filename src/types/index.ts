@@ -24,6 +24,15 @@ export interface AdapterConfig {
   urlAttribute: string;
   individualRewardSelector: string;
   emptySelector: string;
+  facebookScopeSelector?: string;
+  rewardSuccessSelector?: string;
+}
+export interface AutoOperation {
+  id: string;
+  stage: 'OPEN_TASK' | 'FACEBOOK_ACTION' | 'CLAIM_REWARD' | 'CLAIM_BATCH';
+  taskId: string;
+  tabId: number;
+  deadline: number;
 }
 export interface Settings {
   delaySeconds: number;
@@ -33,6 +42,11 @@ export interface Settings {
 }
 export interface State {
   version: 1;
+  automationRevision: number;
+  workflowWindowId: number | null;
+  operation: AutoOperation | null;
+  verifiedTasks: string[];
+  rewardedTasks: string[];
   running: boolean;
   phase: Phase;
   currentPageIndex: number;
@@ -71,7 +85,7 @@ export type Command =
         | 'CLEAR'
         | 'RESCAN';
     }
-  | { type: 'START'; enabled?: Settings['enabled'] }
+  | { type: 'START'; enabled?: Settings['enabled']; windowId?: number }
   | { type: 'SETTINGS'; settings: Settings };
 export interface Scan {
   type: 'SCAN';

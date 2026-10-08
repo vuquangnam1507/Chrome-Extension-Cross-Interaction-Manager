@@ -1,3 +1,4 @@
+import './source-automation';
 import { pageFromUrl } from '../config/pages';
 import type { AdapterConfig, PageId, Task, Scan } from '../types';
 import { interactive, visible, rewardElements } from './detection';

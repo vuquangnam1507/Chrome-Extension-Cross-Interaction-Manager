@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "CrossEngage",
   "version": "1.0.0",
-  "description": "Điều phối công việc Like/Follow do người dùng thực hiện và xác nhận.",
+  "description": "Điều phối tự động công việc Like/Follow trong các tab thuộc CrossEngage.",
   "minimum_chrome_version": "120",
   "permissions": ["storage", "alarms"],
   "host_permissions": ["https://tuongtaccheo.com/*", "https://*.facebook.com/*"],

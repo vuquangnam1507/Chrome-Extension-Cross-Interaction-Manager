@@ -8,7 +8,7 @@ import { facebookUrl } from '../utils/url';
 export class WorkflowManager {
   private queue: Promise<unknown> = Promise.resolve();
   private timer: ReturnType<typeof setTimeout> | undefined;
-  private stopped = false;
+  protected stopped = false;
   private stopVersion = 0;
   dispatch(fn: (s: State) => Promise<void>) {
     const run = this.queue.then(async () => {
@@ -19,6 +19,7 @@ export class WorkflowManager {
         s.error = e instanceof Error ? e.message : String(e);
         transition(s, 'ERROR');
         s.emptyRetryAt = null;
+        s.operation = null;
         s.dueAt = null;
         s.loadDeadline = null;
         this.log(s, s.error);
@@ -39,7 +40,7 @@ export class WorkflowManager {
   async schedule(s: State) {
     clearTimeout(this.timer);
     await chrome.alarms.clear('crossengage');
-    const due = s.dueAt ?? s.emptyRetryAt ?? s.loadDeadline;
+    const due = s.operation?.deadline ?? s.dueAt ?? s.emptyRetryAt ?? s.loadDeadline;
     if (!s.running || this.stopped || due === null) return;
     this.timer = setTimeout(
       () => {
@@ -52,6 +53,10 @@ export class WorkflowManager {
   async wake() {
     return this.dispatch(async (s) => {
       if (!s.running || this.stopped) return;
+      if (s.operation && Date.now() >= s.operation.deadline)
+        throw Error(
+          `Hết thời gian tại bước ${s.operation.stage}. Không tự lặp lại thao tác chưa rõ kết quả.`,
+        );
       if (s.emptyRetryAt !== null && Date.now() >= s.emptyRetryAt) {
         s.emptyRetryAt = null;
         s.emptyRetryCount++;
@@ -114,11 +119,17 @@ export class WorkflowManager {
     const url = pageUrl(this.page(s));
     if (s.originTabId !== null) {
       const tab = await chrome.tabs.get(s.originTabId);
+      if (s.workflowWindowId !== null && tab.windowId !== s.workflowWindowId)
+        throw Error('Tab gốc đã chuyển khỏi cửa sổ workflow. Đã dừng thao tác.');
       if (!pageFromUrl(tab.url || ''))
         throw Error('Tab gốc đã đổi URL; không tự chuyển hướng. Dừng rồi Start lại.');
       await chrome.tabs.update(s.originTabId, { url });
     } else {
-      const tab = await chrome.tabs.create({ url, active: true });
+      const tab = await chrome.tabs.create({
+        url,
+        active: true,
+        ...(s.workflowWindowId !== null ? { windowId: s.workflowWindowId } : {}),
+      });
       s.originTabId = tab.id ?? null;
     }
     this.log(s, `Đang tải ${this.page(s)}`);
@@ -162,6 +173,7 @@ export class WorkflowManager {
         ].includes(s.phase)
       )
         return;
+      if (s.operation) return;
       s.loadDeadline = null;
       if (report.status === 'login')
         throw Error('Tuongtaccheo có dấu hiệu chưa đăng nhập. Đăng nhập ở tab gốc rồi Quét lại.');
@@ -228,6 +240,7 @@ export class WorkflowManager {
     this.log(s, 'Chờ chuyển trang.');
   }
   async stop(s: State) {
+    s.operation = null;
     s.emptyRetryAt = null;
     s.running = false;
     transition(s, 'STOPPED');
@@ -254,6 +267,16 @@ export class WorkflowManager {
       if (c.type === 'START') {
         if (s.running || version !== this.stopVersion) return;
         this.stopped = false;
+        s.operation = null;
+        if (c.windowId !== undefined) {
+          if (!Number.isInteger(c.windowId) || c.windowId < 0)
+            throw Error('Cửa sổ Chrome không hợp lệ.');
+          if (s.workflowWindowId !== c.windowId) {
+            s.originTabId = null;
+            s.taskTabs = {};
+          }
+          s.workflowWindowId = c.windowId;
+        }
         const settings = c.enabled ? { ...s.settings, enabled: c.enabled } : s.settings;
         validateSettings(settings);
         s.settings = settings;
