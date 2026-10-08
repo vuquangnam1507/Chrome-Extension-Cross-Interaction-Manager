@@ -209,8 +209,19 @@ it('claim nhóm chỉ sau đủ kết quả Follow, không claim từng task', a
       ),
   ).toBe(false);
   await result();
-  expect(state.batchRewardConfirmed).toBe(true);
+  expect(state.batchRewardConfirmed).toBe(false);
   expect(state.rewardedTasks).toHaveLength(2);
+  expect(state.phase).toBe('SCANNING_TASKS');
+  expect(state.tasks).toEqual([]);
+  expect(state.dueAt).toBeNull();
+  const page = 'subcheofbvip';
+  await manager.accept(
+    { type: 'SCAN', page, token: state.scanToken!, tasks: [first], status: 'ok', detail: '' },
+    10,
+    pageUrl(page),
+  );
+  expect(state.operation?.stage).toBe('OPEN_TASK');
+  expect(state.currentTaskId).toBe(first.id);
 });
 it('không nhận thưởng khi chỉ click mà chưa xác minh kết quả Facebook', async () => {
   await start();
@@ -520,7 +531,7 @@ it('bỏ qua Follow VIP thiếu nút chuyển nhiệm vụ kế, không ghi hoà
   expect(state.operation?.taskId).toBe(second.id);
   expect(chrome.tabs.remove).toHaveBeenCalledWith(11);
 });
-it('toàn bộ Follow VIP bỏ qua thì chuyển trang, không nhận thưởng', async () => {
+it('toàn bộ Follow VIP đã xử lý dù bỏ qua vẫn tới bước nhận nhóm để trang xác nhận', async () => {
   await start('subcheofbvip', [task('subcheofbvip')]);
   await openFacebook();
   const tab = tabs.get(11)!;
@@ -534,7 +545,7 @@ it('toàn bộ Follow VIP bỏ qua thì chuyển trang, không nhận thưởng'
     tab,
     tab.url!,
   );
-  expect(state.phase).toBe('WAITING_NEXT_PAGE');
+  expect(state.operation?.stage).toBe('CLAIM_BATCH');
   expect(state.batchRewardConfirmed).toBe(false);
   expect(state.rewardedTasks).toEqual([]);
 });

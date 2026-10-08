@@ -1,4 +1,4 @@
-import { installAutomaticHandler, waitFor, DomWaitTimeout } from './automatic-runtime';
+import { installAutomaticHandler, waitFor } from './automatic-runtime';
 import { facebookScope, socialControl, FacebookScopeError } from './automatic-dom';
 import { visible } from './detection';
 installAutomaticHandler(async ({ request: { operation, task, config }, signal, guard }) => {
@@ -39,24 +39,21 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
     resolutionError ||
     'Đã gửi thao tác nhưng chưa thấy dấu hiệu xác nhận trên nút Facebook (nhãn Đã thích/Bỏ thích hoặc aria-pressed). Không bấm lại để tránh đảo ngược tương tác.';
   let control;
-  try {
-    control = await waitFor(inspect, signal, 20000, timeoutDetail);
-  } catch (error) {
-    if (
-      task.page === 'subcheofbvip' &&
-      task.kind === 'FOLLOW' &&
-      error instanceof DomWaitTimeout &&
-      resolutionError === 'Chưa tìm thấy nút tương tác của bài viết đích.'
-    ) {
-      await guard();
+  if (task.page === 'subcheofbvip' && task.kind === 'FOLLOW') {
+    // Only the initial discovery is immediate; never skip an uncertain result
+    // after a click. Wait for document load, not an arbitrary grace period.
+    await waitFor(() => (document.readyState === 'complete' ? true : null), signal);
+    await guard();
+    control = inspect();
+    if (!control && resolutionError === 'Chưa tìm thấy nút tương tác của bài viết đích.') {
       return {
         verified: false,
         skipped: 'missing-follow-control' as const,
-        detail: 'Bỏ qua: không tìm thấy nút Follow sau 20 giây; chưa thực hiện tương tác.',
+        detail: 'Bỏ qua: tab đã tải xong nhưng không có nút Follow; chưa thực hiện tương tác.',
       };
     }
-    throw error;
   }
+  control ||= await waitFor(inspect, signal, 20000, timeoutDetail);
   if (!control.done) {
     await guard();
     const current = inspect();

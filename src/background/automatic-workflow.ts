@@ -134,11 +134,6 @@ export class AutomaticWorkflowManager extends WorkflowManager {
           throw Error(
             'Danh sách nhóm chưa có đủ kết quả Follow được xác minh; không tự nhận thưởng.',
           );
-        if (!s.tasks.some((t) => s.verifiedTasks.includes(t.id))) {
-          this.log(s, 'Toàn bộ nhiệm vụ đã bỏ qua; không nhận thưởng nhóm.');
-          await this.finish(s);
-          return;
-        }
         if (!s.batchRewardConfirmed) await this.begin(s, 'CLAIM_BATCH', s.tasks[0], s.originTabId!);
         else await this.finish(s);
       } else await this.finish(s);
@@ -393,7 +388,7 @@ export class AutomaticWorkflowManager extends WorkflowManager {
       ) {
         s.operation = null;
         s.skippedTasks = [...new Set([...s.skippedTasks, task.id])];
-        this.log(s, 'Bỏ qua nhiệm vụ Follow VIP: không có nút Follow sau thời gian chờ.');
+        this.log(s, 'Bỏ qua nhiệm vụ Follow VIP: tab đã tải xong nhưng không có nút Follow.');
         transition(s, 'TASK_COMPLETED');
         await this.closeFollowTab(s, task, tab.id!, op.documentUrl);
         await this.nextTask(s);
@@ -421,7 +416,19 @@ export class AutomaticWorkflowManager extends WorkflowManager {
             ...s.tasks.filter((t) => s.verifiedTasks.includes(t.id)).map((t) => t.id),
           ]),
         ];
-        await this.finish(s);
+        // The reward control reloads the list itself. Start a fresh scan on the
+        // same document; never navigate away or click reload a second time.
+        const roundIds = new Set(s.tasks.map((t) => t.id));
+        s.completedTasks = s.completedTasks.filter((id) => !roundIds.has(id));
+        s.skippedTasks = s.skippedTasks.filter((id) => !roundIds.has(id));
+        s.verifiedTasks = s.verifiedTasks.filter((id) => !roundIds.has(id));
+        s.tasks = [];
+        s.currentTaskId = null;
+        s.rewardTaskId = null;
+        s.batchRewardConfirmed = false;
+        s.emptyRetryCount = 0;
+        this.log(s, 'Đã nhận thưởng lượt Follow VIP; chờ danh sách mới trên cùng trang.');
+        await this.scan(s);
       }
     });
   }

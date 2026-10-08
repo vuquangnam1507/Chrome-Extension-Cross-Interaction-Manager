@@ -117,3 +117,17 @@ it('bước cũ không được bấm lại khi runtime gửi trùng', async () 
   );
   expect(click).toHaveBeenCalledOnce();
 });
+
+it('nhận nhóm chờ nút nhiệm vụ biến mất rồi mới bấm và chờ thông báo thành công', async () => {
+  document.body.insertAdjacentHTML('beforeend', '<button id="batch">Nhận tất cả xu</button>');
+  const click = vi.fn(() =>
+    document.body.insertAdjacentHTML('beforeend', '<div role="alert">Nhận xu thành công</div>'),
+  );
+  document.querySelector('#batch')!.addEventListener('click', click);
+  const result = run('CLAIM_BATCH');
+  await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalled());
+  expect(click).not.toHaveBeenCalled();
+  document.querySelector('.btn')!.remove();
+  expect((await result).verified).toBe(true);
+  expect(click).toHaveBeenCalledOnce();
+});

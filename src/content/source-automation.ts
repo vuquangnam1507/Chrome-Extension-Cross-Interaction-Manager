@@ -1,6 +1,6 @@
 import { installAutomaticHandler, waitFor } from './automatic-runtime';
 import { controls, successSignals } from './automatic-dom';
-import { interactive, rewardElements } from './detection';
+import { detect, interactive, rewardElements } from './detection';
 import { modules } from '../modules';
 import type { AdapterConfig, Task } from '../types';
 const ancestors = new Map<string, HTMLElement[]>();
@@ -51,6 +51,8 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
     throw Error('Bước không thuộc trang nguồn.');
   const button = await waitFor(() => {
     if (operation.stage === 'CLAIM_BATCH') {
+      // Clicked task buttons disappear; never claim while a task button remains.
+      if (detect(document, task.page, config).length) return null;
       const matches = rewardElements(document, true, config, null, task.page);
       if (matches.length > 1) throw Error('Có nhiều nút Nhận tất cả xu.');
       return matches[0] || null;
@@ -62,6 +64,8 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
   );
   await guard();
   if (!interactive(button)) throw Error('Nút nhận thưởng đã thay đổi.');
+  if (operation.stage === 'CLAIM_BATCH' && detect(document, task.page, config).length)
+    throw Error('Danh sách vẫn còn nút nhiệm vụ; chưa nhận tất cả xu.');
   button.click();
   const evidence = await waitFor(() => {
     const current = successSignals(document, config);

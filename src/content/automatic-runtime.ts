@@ -105,6 +105,7 @@ export function waitFor<T>(
       if (finished) return;
       finished = true;
       observer.disconnect();
+      document.removeEventListener('readystatechange', check);
       clearTimeout(timer);
       signal.removeEventListener('abort', abort);
       if (error) reject(error);
@@ -125,6 +126,7 @@ export function waitFor<T>(
       attributes: true,
       characterData: true,
     });
+    document.addEventListener('readystatechange', check);
     signal.addEventListener('abort', abort, { once: true });
     timer = setTimeout(
       () =>

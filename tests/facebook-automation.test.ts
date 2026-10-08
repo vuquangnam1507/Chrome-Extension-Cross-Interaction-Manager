@@ -208,7 +208,7 @@ it('DOM bài viết render lại có permalink đúng thì nhận kết quả, k
     verified: true,
   });
 });
-it('Follow VIP thiếu nút sau timeout trả kết quả bỏ qua', async () => {
+it('Follow VIP tải xong thiếu nút trả kết quả bỏ qua ngay', async () => {
   const followTask = { ...task, page: 'subcheofbvip', kind: 'FOLLOW' };
   document.body.innerHTML = '<main><h1>Trang cá nhân</h1></main>';
   listener(
@@ -221,7 +221,7 @@ it('Follow VIP thiếu nút sau timeout trả kết quả bỏ qua', async () =>
     { id: 'extension' },
     vi.fn(),
   );
-  await vi.advanceTimersByTimeAsync(20000);
+  await vi.advanceTimersByTimeAsync(0);
   expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
     ok: true,
     verified: false,
@@ -247,5 +247,30 @@ it('Follow VIP đã theo dõi không click để tránh hủy theo dõi', async 
   expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
     ok: true,
     verified: true,
+  });
+});
+
+it('Follow VIP chờ load thực sự rồi bỏ qua ngay, không cần timer tìm nút', async () => {
+  let ready: DocumentReadyState = 'loading';
+  vi.spyOn(document, 'readyState', 'get').mockImplementation(() => ready);
+  document.body.innerHTML = '<main>Trang cá nhân</main>';
+  listener(
+    {
+      type: 'AUTO_STEP',
+      operation: state.operation,
+      task: { ...task, page: 'subcheofbvip', kind: 'FOLLOW' },
+      config: state.settings.adapters.subcheofbvip,
+    },
+    { id: 'extension' },
+    vi.fn(),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(messages.some((m) => m.type === 'AUTO_RESULT')).toBe(false);
+  ready = 'complete';
+  document.dispatchEvent(new Event('readystatechange'));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
+    ok: true,
+    skipped: 'missing-follow-control',
   });
 });
