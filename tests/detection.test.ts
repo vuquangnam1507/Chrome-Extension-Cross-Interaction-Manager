@@ -56,3 +56,44 @@ describe('DOM adapter', () => {
       expect(facebookUrl(u)).toBeNull();
   });
 });
+
+it('đọc đúng nút Like thực tế có URL bọc dấu nháy trong title mà không click', async () => {
+  const { default: html } = await import('./fixtures/like-title.html?raw');
+  document.body.innerHTML = html;
+  const button = document.querySelector('button')!;
+  const clicked = vi.fn();
+  button.addEventListener('click', clicked);
+  expect(detect(document, 'likepostvipcheo', c)).toEqual([
+    {
+      id: 'likepostvipcheo:https://www.facebook.com/1491539046359094',
+      page: 'likepostvipcheo',
+      kind: 'LIKE',
+      url: 'https://www.facebook.com/1491539046359094',
+      label: 'LIKE',
+    },
+  ]);
+  expect(clicked).not.toHaveBeenCalled();
+});
+it('title hỗ trợ URL không bọc nháy hoặc bọc nháy đôi, vẫn loại trùng với href', () => {
+  document.body.innerHTML =
+    '<button class="btn btn-default"></button><a class="btn btn-default" href="https://facebook.com/123">Like</a>';
+  for (const value of ['https://facebook.com/123', ' "https://facebook.com/123" ']) {
+    document.querySelector('button')!.setAttribute('title', value);
+    expect(detect(document, 'likepostvipre', c)).toHaveLength(1);
+  }
+});
+it('title không cho phép URL giả, javascript hoặc nút nhận thưởng', () => {
+  document.body.innerHTML = '<button class="btn btn-default"></button>';
+  const button = document.querySelector('button')!;
+  for (const value of [
+    "'https://facebook.com.evil.test/123'",
+    "'javascript:alert(1)'",
+    "like('id','https://facebook.com/123')",
+  ]) {
+    button.setAttribute('title', value);
+    expect(detect(document, 'likepostvipcheo', c)).toEqual([]);
+  }
+  button.setAttribute('title', "'https://facebook.com/123'");
+  button.textContent = 'Nhận xu';
+  expect(detect(document, 'likepostvipcheo', c)).toEqual([]);
+});

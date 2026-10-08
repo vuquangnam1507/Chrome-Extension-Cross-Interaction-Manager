@@ -108,6 +108,7 @@ chrome.runtime.onMessage.addListener((m, _sender, reply) => {
         'aria-disabled',
         'href',
         'data-url',
+        'title',
         ...(m.config.urlAttribute ? [m.config.urlAttribute] : []),
       ],
     });

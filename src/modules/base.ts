@@ -23,9 +23,21 @@ export function makeModule(
         el.getAttribute('href'),
         c.urlAttribute ? el.getAttribute(c.urlAttribute) : null,
         el.getAttribute('data-url'),
+        // Observed task buttons expose a quoted Facebook URL in title.
+        // Read it as data only; never execute the inline onclick handler.
+        el.getAttribute('title'),
         context?.querySelector('a[href*="facebook.com"]')?.getAttribute('href'),
       ];
-      const url = raw.map((v) => (v ? facebookUrl(v) : null)).find(Boolean);
+      const url = raw
+        .map((value) => {
+          if (!value) return null;
+          const trimmed = value.trim();
+          const quoted =
+            (trimmed.startsWith("'") && trimmed.endsWith("'")) ||
+            (trimmed.startsWith('"') && trimmed.endsWith('"'));
+          return facebookUrl(quoted ? trimmed.slice(1, -1).trim() : trimmed);
+        })
+        .find(Boolean);
       if (!url) return null;
       return { id: `${id}:${url}`, page: id, kind, url, label: label.slice(0, 160) || kind };
     },

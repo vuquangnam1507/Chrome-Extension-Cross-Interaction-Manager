@@ -40,9 +40,9 @@ npm run build
 
 ## Những phần cần xác minh bằng HTML thật
 
-Chưa có HTML đăng nhập thực của bốn trang. Fixture trong `tests/fixtures/` là dữ liệu kiểm thử tổng hợp, **không phải bằng chứng selector phù hợp website thật**. Logic chạy chính đọc DOM thật và storage, không có công việc giả lập.
+Đã có HTML một nút Like thực tế chứa URL trong `title`, lưu tại `tests/fixtures/like-title.html` và được kiểm thử. Chưa có HTML đầy đủ của danh sách và nút nhận thưởng trên cả bốn trang. Fixture `tests/fixtures/tasks.html` là dữ liệu tổng hợp, **không phải bằng chứng toàn bộ selector phù hợp website thật**. Logic chạy chính đọc DOM thật và storage, không có công việc giả lập.
 
-Adapter mặc định tìm `.btn.btn-default`, kiểm tra hiển thị/disabled, loại nhãn chức năng như nhận xu/tải lại/đăng nhập, và yêu cầu trích được URL HTTPS Facebook hợp lệ. URL lấy từ `href`, `data-url`, thuộc tính được cấu hình, hoặc thẻ `a` trong container đã cấu hình. Không chạy hay phân tích tùy tiện mã `onclick`, không đoán ID Facebook.
+Adapter mặc định tìm `.btn.btn-default`, kiểm tra hiển thị/disabled, loại nhãn chức năng như nhận xu/tải lại/đăng nhập, và yêu cầu trích được URL HTTPS Facebook hợp lệ. URL lấy từ `href`, `data-url`, `title` (hỗ trợ URL bọc dấu nháy đơn/đôi theo HTML nút Like đã cung cấp), thuộc tính được cấu hình, hoặc thẻ `a` trong container đã cấu hình. Không chạy hay phân tích tùy tiện mã `onclick`, không đoán ID Facebook.
 
 Trong **Cấu hình → Adapter DOM nâng cao**, mỗi trang có các trường:
 
