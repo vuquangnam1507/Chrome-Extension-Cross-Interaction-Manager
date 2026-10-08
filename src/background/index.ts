@@ -8,6 +8,10 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (sender.tab) {
     if (sender.tab.id === undefined) return;
     const id = sender.tab.id;
+    if (message?.type === 'AUTO_GUARD' && typeof message.operationId === 'string') {
+      void manager.canAct(id, message.operationId).then(ok => reply({ok})).catch(() => reply({ok:false}));
+      return true;
+    }
     if (message?.type === 'SCAN' && Array.isArray(message.tasks) && message.tasks.length <= 2000)
       result = manager.accept(message, id, sender.url || '');
     else if (message?.type === 'READY' && pageFromUrl(sender.url || ''))
@@ -43,6 +47,7 @@ chrome.tabs.onCreated.addListener((tab) => {
 chrome.tabs.onRemoved.addListener((id) => {
   void manager.tabRemoved(id);
 });
+chrome.tabs.onAttached.addListener((id, info) => { void manager.tabAttached(id, info.newWindowId); });
 chrome.tabs.onUpdated.addListener((id, info, tab) => {
   if (info.status === 'complete') void manager.pageReady(id);
   if (info.url || info.status === 'complete') void manager.observeTab(tab);
