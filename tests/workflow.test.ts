@@ -343,6 +343,20 @@ async function reportEmpty() {
     pageUrl(page),
   );
 }
+it('Start cả bốn mục thì luân phiên đủ bốn trang trên một tab gốc', async () => {
+  await manager.command({ type: 'START' });
+  const visited: PageId[] = [];
+  for (let n = 0; n < 4; n++) {
+    visited.push(stored.settings.order[stored.currentPageIndex]);
+    await manager.pageReady(stored.originTabId!);
+    await manager.command({ type: 'SKIP_PAGE' });
+    await vi.advanceTimersByTimeAsync(5000);
+  }
+  expect(visited).toEqual(['likepostvipcheo', 'likepostvipre', 'subcheo', 'subcheofbvip']);
+  expect(stored.currentPageIndex).toBe(0);
+  expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
+  expect(stored.running).toBe(true);
+});
 it('một trang chờ 5 giây rồi tải lại danh sách tại chỗ', async () => {
   await manager.command({
     type: 'START',
