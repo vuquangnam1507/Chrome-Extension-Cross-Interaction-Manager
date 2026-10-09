@@ -389,10 +389,7 @@ export class AutomaticWorkflowManager extends WorkflowManager {
       ) {
         s.operation = null;
         s.skippedTasks = [...new Set([...s.skippedTasks, task.id])];
-        this.log(
-          s,
-          'Bỏ qua nhiệm vụ Follow VIP: không xác định được nút Follow sau một lần kiểm tra trong 5 giây.',
-        );
+        this.log(s, 'Bỏ qua nhiệm vụ Follow VIP: không xác định được nút Follow trong 5 giây chờ.');
         transition(s, 'TASK_COMPLETED');
         await this.closeFollowTab(s, task, tab.id!, op.documentUrl);
         await this.nextTask(s);

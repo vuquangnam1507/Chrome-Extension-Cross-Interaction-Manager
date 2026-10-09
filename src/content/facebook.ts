@@ -1,4 +1,4 @@
-import { installAutomaticHandler, waitFor } from './automatic-runtime';
+import { installAutomaticHandler, waitFor, DomWaitTimeout } from './automatic-runtime';
 import { facebookScope, socialControl, FacebookScopeError } from './automatic-dom';
 import { visible } from './detection';
 installAutomaticHandler(async ({ request: { operation, task, config }, signal, guard }) => {
@@ -41,27 +41,21 @@ installAutomaticHandler(async ({ request: { operation, task, config }, signal, g
   const quickFollow = task.page === 'subcheofbvip' && task.kind === 'FOLLOW';
   let control;
   if (quickFollow) {
-    // One discovery pass after a bounded data-loading grace period.
-    await new Promise<void>((resolve, reject) => {
-      const abort = () => {
-        clearTimeout(timer);
-        signal.removeEventListener('abort', abort);
-        reject(Error('Đã hủy thao tác.'));
-      };
-      const timer = setTimeout(() => {
-        signal.removeEventListener('abort', abort);
-        resolve();
-      }, 5000);
-      signal.addEventListener('abort', abort, { once: true });
-      if (signal.aborted) abort();
-    });
-    await guard();
-    control = inspect();
-    if (!control) {
+    // Bấm Follow ngay khi nút xuất hiện; chỉ tiếp tục quan sát tối đa 5 giây cho dữ liệu tải muộn.
+    try {
+      control = await waitFor(
+        inspect,
+        signal,
+        5000,
+        () => `FACEBOOK_FIND_CONTROL: ${resolutionError}`,
+      );
+    } catch (e) {
+      if (!(e instanceof DomWaitTimeout)) throw e;
+      await guard();
       return {
         verified: false,
         skipped: 'missing-follow-control' as const,
-        detail: `Bỏ qua sau một lần kiểm tra (5 giây): ${resolutionError}`,
+        detail: `Bỏ qua sau 5 giây chưa xác định được nút Follow: ${resolutionError}`,
       };
     }
   } else {

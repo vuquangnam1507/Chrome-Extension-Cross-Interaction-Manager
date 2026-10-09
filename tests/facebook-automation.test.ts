@@ -208,7 +208,7 @@ it('DOM bài viết render lại có permalink đúng thì nhận kết quả, k
     verified: true,
   });
 });
-it('Follow VIP thiếu nút chỉ bỏ qua sau một lần kiểm tra 5 giây', async () => {
+it('Follow VIP thiếu nút vẫn chỉ bỏ qua sau 5 giây chờ', async () => {
   const followTask = { ...task, page: 'subcheofbvip', kind: 'FOLLOW' };
   document.body.innerHTML = '<main><h1>Trang cá nhân</h1></main>';
   listener(
@@ -226,6 +226,30 @@ it('Follow VIP thiếu nút chỉ bỏ qua sau một lần kiểm tra 5 giây', 
     ok: true,
     verified: false,
     skipped: 'missing-follow-control',
+  });
+});
+it('Follow VIP bấm ngay khi nút đã hiển thị, không chờ 5 giây', async () => {
+  document.body.innerHTML = '<main><h1>Trang cá nhân</h1><button>Theo dõi</button></main>';
+  const button = document.querySelector<HTMLElement>('button')!;
+  const click = vi.fn(() => {
+    button.textContent = 'Đang theo dõi';
+  });
+  button.addEventListener('click', click);
+  listener(
+    {
+      type: 'AUTO_STEP',
+      operation: state.operation,
+      task: { ...task, page: 'subcheofbvip', kind: 'FOLLOW' },
+      config: state.settings.adapters.subcheofbvip,
+    },
+    { id: 'extension' },
+    vi.fn(),
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(click).toHaveBeenCalledOnce();
+  expect(messages.find((m) => m.type === 'AUTO_RESULT')).toMatchObject({
+    ok: true,
+    verified: true,
   });
 });
 it('Follow VIP đã theo dõi không click để tránh hủy theo dõi', async () => {
